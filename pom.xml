@@ -28,7 +28,7 @@
     <artifactId>dans-bagit-lib</artifactId>
     <version>1.0.1-SNAPSHOT</version>
 
-    <name>bagit</name>
+    <name>DANS BagIt Library</name>
     <url>https://github.com/DANS-KNAW/dans-bagit-lib</url>
     <description>The BAGIT LIBRARY is a software library intended to support the creation, manipulation, and validation of bags. Its current version is 0.97. It is version aware with the earliest supported version being 0.93.</description>
     <inceptionYear>2023</inceptionYear>
