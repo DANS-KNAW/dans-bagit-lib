@@ -16,29 +16,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.9
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-            ${{ runner.os }}-
+          cache: 'pip'
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: adopt-openj9
           java-version: 17
-
-      - name: Cache local Maven repository
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-docs-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-docs-
+          cache: 'maven'
 
       - name: Generate maven site
         run: mvn -B clean test site jacoco:report coveralls:report --file pom.xml -DrepoToken=${{ secrets.COVERALLS_REPO_TOKEN }} -Djarsigner.skip=true

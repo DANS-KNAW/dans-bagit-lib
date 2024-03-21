@@ -11,6 +11,7 @@ jobs:
         with:
           java-version: 17
           distribution: 'adopt'
+          cache: 'maven'
       - name: Install dependencies
         run: mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V
       - name: Run tests and collect coverage
