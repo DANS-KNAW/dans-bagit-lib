@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Metadata.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.domain</a> &gt; <span class="el_source">Metadata.java</span></div><h1>Metadata.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.domain;
+
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * A class to represent the bag-info.txt (and package-info.txt in older versions)
+ */
+@SuppressWarnings({&quot;PMD.UseLocaleWithCaseConversions&quot;})
+<span class="fc" id="L30">public class Metadata {</span>
+  private static final String PAYLOAD_OXUM = &quot;Payload-Oxum&quot;;
+<span class="fc" id="L32">  private Map&lt;String, List&lt;String&gt;&gt; map = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L33">  private List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; list = new ArrayList&lt;&gt;();</span>
+  
+  @Override
+  public String toString() {
+<span class="fc" id="L37">    return list.toString();</span>
+  }
+
+  @Override
+  public int hashCode() {
+<span class="fc" id="L42">    return Objects.hash(list);</span>
+  }
+
+  @Override
+  public boolean equals(final Object obj) {
+<span class="fc bfc" id="L47" title="All 2 branches covered.">    if (this == obj){return true;}</span>
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    if (obj == null){return false;}</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">    if (!(obj instanceof Metadata)){return false;}</span>
+    
+<span class="fc" id="L51">    final Metadata other = (Metadata) obj;</span>
+<span class="fc" id="L52">    return Objects.equals(this.list, other.list);</span>
+  }
+  
+  /**
+   * all the metadata
+   * 
+   * @return return the order and case preserved metadata
+   */
+  public List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; getAll(){
+<span class="fc" id="L61">    return list;</span>
+  }
+  
+  /**
+   * get all the values for a specific label (key)
+   * 
+   * @param key the case insensitive label(key) in the metadata
+   * 
+   * @return the list of values for that label
+   */
+  public List&lt;String&gt; get(final String key){
+<span class="fc" id="L72">    return map.get(key.toUpperCase());</span>
+  }
+  
+  /**
+   * add a entry into the metadata or append a value if the label already exists
+   * 
+   * @param key the label
+   * @param value the value of the label
+   * 
+   * @return &lt;samp&gt;true&lt;/samp&gt; (as specified by {@link Collection#add})
+   */
+  public boolean add(final String key, final String value){
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    if(PAYLOAD_OXUM.equalsIgnoreCase(key)){</span>
+<span class="fc" id="L85">      this.remove(PAYLOAD_OXUM);</span>
+    }
+    
+<span class="fc" id="L88">    final String upperCaseKey = key.toUpperCase();</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    if(map.get(upperCaseKey) == null){</span>
+<span class="fc" id="L90">      map.put(upperCaseKey, new ArrayList&lt;&gt;());</span>
+    }
+<span class="fc" id="L92">    map.get(upperCaseKey).add(value);</span>
+    
+<span class="fc" id="L94">    return list.add(new SimpleImmutableEntry&lt;&gt;(key, value));</span>
+  }
+  
+  /**
+   * remove the label and all its values
+   * 
+   * @param key the label to remove along with its value(s)
+   */
+  public void remove(final String key){
+<span class="fc" id="L103">    map.remove(key.toUpperCase());</span>
+<span class="fc" id="L104">    final List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; newList = new ArrayList&lt;&gt;();</span>
+    
+<span class="fc bfc" id="L106" title="All 2 branches covered.">    for(final SimpleImmutableEntry&lt;String, String&gt; entry : list){</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">      if(!entry.getKey().equalsIgnoreCase(key)){</span>
+<span class="fc" id="L108">        newList.add(entry);</span>
+      }
+<span class="fc" id="L110">    }</span>
+<span class="fc" id="L111">    list = newList;</span>
+<span class="fc" id="L112">  }</span>
+  
+  /**
+   * check if the metadata contains a particular label(key)
+   * 
+   * @param key the label to check
+   * @return if the label exists
+   */
+  public boolean contains(final String key){
+<span class="fc" id="L121">    return map.keySet().contains(key.toUpperCase());</span>
+  }
+  
+  /**
+   * add multiple metadata entries
+   * 
+   * @param data the metadata to add
+   */
+  public void addAll(final List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; data){
+<span class="fc bfc" id="L130" title="All 2 branches covered.">    for(final SimpleImmutableEntry&lt;String, String&gt; entry : data){</span>
+<span class="fc" id="L131">      this.add(entry.getKey(), entry.getValue());</span>
+<span class="fc" id="L132">    }</span>
+<span class="fc" id="L133">  }</span>
+  
+  /**
+   * payload oxum is a special case where it makes no sense to have multiple values so instead of just appending we upsert (insert or update)
+   * @param payloadOxumValue the value payload-oxum should be set to
+   * 
+   * @return &lt;samp&gt;true&lt;/samp&gt; (as specified by {@link Collection#add})
+   */
+  public boolean upsertPayloadOxum(final String payloadOxumValue){
+<span class="fc" id="L142">    map.remove(PAYLOAD_OXUM.toUpperCase());</span>
+<span class="fc" id="L143">    SimpleImmutableEntry&lt;String, String&gt; entryToRemove = null;</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">    for(final SimpleImmutableEntry&lt;String, String&gt; entry : list){</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">      if(PAYLOAD_OXUM.equalsIgnoreCase(entry.getKey())){</span>
+<span class="fc" id="L146">        entryToRemove = entry;</span>
+<span class="fc" id="L147">        continue;</span>
+      }
+<span class="fc" id="L149">    }</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">    if(entryToRemove != null){</span>
+<span class="fc" id="L151">      list.remove(entryToRemove);</span>
+    }
+    
+<span class="fc" id="L154">    return this.add(PAYLOAD_OXUM, payloadOxumValue);</span>
+  }
+  
+  /**
+   * @return true if this metadata contains no entries
+   */
+  public boolean isEmpty(){
+<span class="fc" id="L161">    return list.isEmpty();</span>
+  }
+
+  protected Map&lt;String, List&lt;String&gt;&gt; getMap() {
+<span class="fc" id="L165">    return map;</span>
+  }
+
+  protected void setMap(final Map&lt;String, List&lt;String&gt;&gt; map) {
+<span class="nc" id="L169">    this.map = map;</span>
+<span class="nc" id="L170">  }</span>
+
+  protected List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; getList() {
+<span class="fc" id="L173">    return list;</span>
+  }
+
+  protected void setList(final List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; list) {
+<span class="nc" id="L177">    this.list = list;</span>
+<span class="nc" id="L178">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

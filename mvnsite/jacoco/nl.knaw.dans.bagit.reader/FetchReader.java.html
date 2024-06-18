@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FetchReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.reader</a> &gt; <span class="el_source">FetchReader.java</span></div><h1>FetchReader.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.reader;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.ResourceBundle;
+
+import nl.knaw.dans.bagit.exceptions.InvalidBagitFileFormatException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import nl.knaw.dans.bagit.domain.FetchItem;
+import nl.knaw.dans.bagit.exceptions.MaliciousPathException;
+
+/**
+ * This class is responsible for reading and parsing fetch.txt file from the filesystem
+ */
+public final class FetchReader {
+<span class="fc" id="L39">  private static final Logger logger = LoggerFactory.getLogger(FetchReader.class);</span>
+<span class="fc" id="L40">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  private static final String FETCH_LINE_REGEX = &quot;.*[ \t]*(\\d*|-)[ \t]*.*&quot;;
+
+  private FetchReader(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Reads a fetch.txt file
+   * 
+   * @param fetchFile the specific fetch file
+   * @param encoding the encoding to read the file with
+   * @param bagRootDir the root directory of the bag
+   * @return a list of items to fetch
+   * 
+   * @throws IOException if there is a problem reading a file
+   * @throws MaliciousPathException if the path was crafted to point outside the bag directory
+   * @throws InvalidBagitFileFormatException if the fetch format does not follow the bagit specification
+   */
+  @SuppressWarnings(&quot;PMD.AvoidInstantiatingObjectsInLoops&quot;)
+  public static List&lt;FetchItem&gt; readFetch(final Path fetchFile, final Charset encoding, final Path bagRootDir) throws IOException, MaliciousPathException, InvalidBagitFileFormatException{
+<span class="fc" id="L61">    logger.info(messages.getString(&quot;reading_fetch_file&quot;), fetchFile);</span>
+<span class="fc" id="L62">    final List&lt;FetchItem&gt; itemsToFetch = new ArrayList&lt;&gt;();</span>
+    
+<span class="fc" id="L64">    try(final BufferedReader reader = Files.newBufferedReader(fetchFile, encoding)){</span>
+<span class="fc" id="L65">      String line = reader.readLine();</span>
+<span class="fc" id="L66">      String[] parts = null;</span>
+<span class="fc" id="L67">      long length = 0;</span>
+<span class="fc" id="L68">      URL url = null;</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">      while(line != null){</span>
+<span class="pc bpc" id="L70" title="1 of 4 branches missed.">        if(line.matches(FETCH_LINE_REGEX) &amp;&amp; !line.matches(&quot;\\s*&quot;)){</span>
+<span class="fc" id="L71">          parts = line.split(&quot;\\s+&quot;, 3);</span>
+<span class="fc" id="L72">          final Path path = TagFileReader.createFileFromManifest(bagRootDir, parts[2]);</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">          length = parts[1].equals(&quot;-&quot;) ? -1 : Long.decode(parts[1]);</span>
+<span class="fc" id="L74">          url = new URL(parts[0]);</span>
+          
+<span class="fc" id="L76">          logger.debug(messages.getString(&quot;read_fetch_file_line&quot;), url, length, parts[2], fetchFile);</span>
+<span class="fc" id="L77">          final FetchItem itemToFetch = new FetchItem(url, length, path);</span>
+<span class="fc" id="L78">          itemsToFetch.add(itemToFetch);</span>
+<span class="fc" id="L79">        }</span>
+        else{
+<span class="fc" id="L81">          throw new InvalidBagitFileFormatException(messages.getString(&quot;invalid_fetch_file_line_error&quot;).replace(&quot;{}&quot;, line));</span>
+        }
+        
+<span class="fc" id="L84">        line = reader.readLine();</span>
+      }
+    }
+
+<span class="fc" id="L88">    return itemsToFetch;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

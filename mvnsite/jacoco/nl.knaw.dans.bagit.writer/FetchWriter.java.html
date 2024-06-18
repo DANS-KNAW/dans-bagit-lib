@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FetchWriter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.writer</a> &gt; <span class="el_source">FetchWriter.java</span></div><h1>FetchWriter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.writer;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.List;
+import java.util.ResourceBundle;
+
+import nl.knaw.dans.bagit.domain.FetchItem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.BufferedWriter;
+
+/**
+ * Responsible for writing out the list of {@link FetchItem} to the fetch.txt file on the filesystem
+ */
+public final class FetchWriter {
+<span class="fc" id="L36">  private static final Logger logger = LoggerFactory.getLogger(FetchWriter.class);</span>
+<span class="fc" id="L37">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+  private FetchWriter(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Write the fetch.txt file to the outputDir with the specified encoding (charsetName)
+   * 
+   * @param itemsToFetch the list of {@link FetchItem}s to write into the fetch.txt
+   * @param outputDir the root of the bag
+   * @param bagitRootDir the path to the root of the bag
+   * @param charsetName the name of the encoding for the file
+   * 
+   * @throws IOException if there was a problem writing a file
+   */
+  public static void writeFetchFile(final List&lt;FetchItem&gt; itemsToFetch, final Path outputDir, final Path bagitRootDir, final Charset charsetName) throws IOException{
+<span class="fc" id="L54">    logger.debug(messages.getString(&quot;writing_fetch_file_to_path&quot;), outputDir);</span>
+<span class="fc" id="L55">    final Path fetchFilePath = outputDir.resolve(&quot;fetch.txt&quot;);</span>
+
+<span class="fc" id="L57">    try (BufferedWriter writer = Files.newBufferedWriter(fetchFilePath, charsetName,</span>
+            StandardOpenOption.APPEND, StandardOpenOption.CREATE)) {
+<span class="fc bfc" id="L59" title="All 2 branches covered.">      for (final FetchItem item : itemsToFetch) {</span>
+<span class="fc" id="L60">        final String line = formatFetchLine(item, bagitRootDir);</span>
+<span class="fc" id="L61">        logger.debug(messages.getString(&quot;writing_line_to_file&quot;), line, fetchFilePath);</span>
+<span class="fc" id="L62">        writer.append(line);</span>
+<span class="fc" id="L63">      }</span>
+    }
+<span class="fc" id="L65">  }</span>
+  
+  private static String formatFetchLine(final FetchItem fetchItem, final Path bagitRootDir){
+<span class="fc" id="L68">    final StringBuilder sb = new StringBuilder();</span>
+<span class="fc" id="L69">    sb.append(fetchItem.getUrl()).append(' ');</span>
+    
+<span class="fc bfc" id="L71" title="All 4 branches covered.">    if(fetchItem.getLength() == null || fetchItem.getLength() &lt; 0){</span>
+<span class="fc" id="L72">      sb.append(&quot;- &quot;);</span>
+    }
+    else{
+<span class="fc" id="L75">      sb.append(fetchItem.getLength()).append(' ');</span>
+    }
+    
+<span class="fc" id="L78">    sb.append(RelativePathWriter.formatRelativePathString(bagitRootDir, fetchItem.getPath()));</span>
+      
+<span class="fc" id="L80">    return sb.toString();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

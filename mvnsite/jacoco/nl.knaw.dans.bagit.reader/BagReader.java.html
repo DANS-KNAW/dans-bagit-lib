@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BagReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.reader</a> &gt; <span class="el_source">BagReader.java</span></div><h1>BagReader.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.reader;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.AbstractMap.SimpleImmutableEntry;
+
+import nl.knaw.dans.bagit.domain.Bag;
+import nl.knaw.dans.bagit.domain.Version;
+import nl.knaw.dans.bagit.exceptions.InvalidBagMetadataException;
+import nl.knaw.dans.bagit.exceptions.InvalidBagitFileFormatException;
+import nl.knaw.dans.bagit.exceptions.MaliciousPathException;
+import nl.knaw.dans.bagit.exceptions.UnparsableVersionException;
+import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
+import nl.knaw.dans.bagit.hash.BagitAlgorithmNameToSupportedAlgorithmMapping;
+import nl.knaw.dans.bagit.hash.StandardBagitAlgorithmNameToSupportedAlgorithmMapping;
+
+/**
+ * Responsible for reading a bag from the filesystem.
+ */
+public final class BagReader {
+  private final BagitAlgorithmNameToSupportedAlgorithmMapping nameMapping;
+  
+<span class="fc" id="L40">  public BagReader(){</span>
+<span class="fc" id="L41">    this.nameMapping = new StandardBagitAlgorithmNameToSupportedAlgorithmMapping();</span>
+<span class="fc" id="L42">  }</span>
+  
+<span class="fc" id="L44">  public BagReader(final BagitAlgorithmNameToSupportedAlgorithmMapping nameMapping){</span>
+<span class="fc" id="L45">    this.nameMapping = nameMapping;</span>
+<span class="fc" id="L46">  }</span>
+  
+  /**
+   * Read the bag from the filesystem and create a bag object
+   * 
+   * @param rootDir the root directory of the bag 
+   * @throws IOException if there is a problem reading a file
+   * @return a {@link Bag} object representing a bag on the filesystem
+   * 
+   * @throws UnparsableVersionException If there is a problem parsing the bagit version
+   * @throws MaliciousPathException if there is path that is referenced in the manifest or fetch file that is outside the bag root directory
+   * @throws InvalidBagMetadataException if the metadata or bagit.txt file does not conform to the bagit spec
+   * @throws UnsupportedAlgorithmException if the manifest uses a algorithm that isn't supported
+   * @throws InvalidBagitFileFormatException if the manifest or fetch file is not formatted properly
+   */
+  public Bag read(final Path rootDir) throws IOException, UnparsableVersionException, MaliciousPathException, InvalidBagMetadataException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+<span class="fc" id="L62">    final Bag bag = new Bag();</span>
+    
+    //@Incubating
+<span class="fc" id="L65">    Path bagitDir = rootDir.resolve(&quot;.bagit&quot;);</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">    if(!Files.exists(bagitDir)){</span>
+<span class="fc" id="L67">      bagitDir = rootDir;</span>
+    }
+<span class="fc" id="L69">    bag.setRootDir(rootDir);</span>
+    
+<span class="fc" id="L71">    final Path bagitFile = bagitDir.resolve(&quot;bagit.txt&quot;);</span>
+<span class="fc" id="L72">    final SimpleImmutableEntry&lt;Version, Charset&gt; bagitInfo = BagitTextFileReader.readBagitTextFile(bagitFile);</span>
+<span class="fc" id="L73">    bag.setVersion(bagitInfo.getKey());</span>
+<span class="fc" id="L74">    bag.setFileEncoding(bagitInfo.getValue());</span>
+    
+<span class="fc" id="L76">    ManifestReader.readAllManifests(nameMapping, bagitDir, bag);</span>
+    
+<span class="fc" id="L78">    bag.getMetadata().addAll(MetadataReader.readBagMetadata(bagitDir, bag.getFileEncoding()));</span>
+    
+<span class="fc" id="L80">    final Path fetchFile = bagitDir.resolve(&quot;fetch.txt&quot;);</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">    if(Files.exists(fetchFile)){</span>
+<span class="fc" id="L82">      bag.getItemsToFetch().addAll(FetchReader.readFetch(fetchFile, bag.getFileEncoding(), bag.getRootDir()));</span>
+    }
+    
+<span class="fc" id="L85">    return bag;</span>
+  }
+  
+  public BagitAlgorithmNameToSupportedAlgorithmMapping getNameMapping() {
+<span class="nc" id="L89">    return nameMapping;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

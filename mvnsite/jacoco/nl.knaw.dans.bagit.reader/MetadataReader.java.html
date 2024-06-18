@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MetadataReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.reader</a> &gt; <span class="el_source">MetadataReader.java</span></div><h1>MetadataReader.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.reader;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.ResourceBundle;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import nl.knaw.dans.bagit.exceptions.InvalidBagMetadataException;
+
+/**
+ * This class is responsible for reading and parsing bagit metadata files from the filesystem
+ */
+public final class MetadataReader {
+<span class="fc" id="L36">  private static final Logger logger = LoggerFactory.getLogger(MetadataReader.class);</span>
+<span class="fc" id="L37">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+
+  private MetadataReader(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Reads the bag metadata file (bag-info.txt or package-info.txt) and returns it.
+   * 
+   * @param rootDir the root directory of the bag
+   * @param encoding the encoding of the bagit.txt file
+   * @return the bag-info.txt (metadata) information
+   * 
+   * @throws IOException if there is a problem reading a file
+   * @throws InvalidBagMetadataException if the metadata file does not conform to the bagit spec
+   */
+  public static List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; readBagMetadata(final Path rootDir, final Charset encoding) throws IOException, InvalidBagMetadataException{
+<span class="fc" id="L54">    logger.info(messages.getString(&quot;attempting_read_metadata&quot;));</span>
+<span class="fc" id="L55">    List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; metadata = new ArrayList&lt;&gt;();</span>
+    
+<span class="fc" id="L57">    final Path bagInfoFile = rootDir.resolve(&quot;bag-info.txt&quot;);</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">    if(Files.exists(bagInfoFile)){</span>
+<span class="fc" id="L59">      logger.debug(messages.getString(&quot;found_metadata_file&quot;), bagInfoFile);</span>
+<span class="fc" id="L60">      metadata = KeyValueReader.readKeyValuesFromFile(bagInfoFile, &quot;:&quot;, encoding);</span>
+    }
+<span class="fc" id="L62">    final Path packageInfoFile = rootDir.resolve(&quot;package-info.txt&quot;); //only exists in versions 0.93 - 0.95</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">    if(Files.exists(packageInfoFile)){</span>
+<span class="fc" id="L64">      logger.debug(messages.getString(&quot;found_metadata_file&quot;), packageInfoFile);</span>
+<span class="fc" id="L65">      metadata = KeyValueReader.readKeyValuesFromFile(packageInfoFile, &quot;:&quot;, encoding);</span>
+    }
+    
+<span class="fc" id="L68">    return metadata;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

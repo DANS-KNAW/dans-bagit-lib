@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Bag.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.domain</a> &gt; <span class="el_source">Bag.java</span></div><h1>Bag.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.domain;
+
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * The main representation of the bagit spec.
+ */
+public final class Bag {
+  //The original version of the bag
+<span class="fc" id="L32">  private Version version = new Version(-1, -1);</span>
+  
+  //from the bagit.txt or UTF-8 for new bags
+<span class="fc" id="L35">  private Charset fileEncoding = StandardCharsets.UTF_8;</span>
+  
+  //equivalent to the manifest-&lt;ALG&gt;.txt files
+<span class="fc" id="L38">  private Set&lt;Manifest&gt; payLoadManifests = new HashSet&lt;&gt;();</span>
+  
+  //equivalent to the tagmanifest-&lt;ALG&gt;.txt  files
+<span class="fc" id="L41">  private Set&lt;Manifest&gt; tagManifests = new HashSet&lt;&gt;();</span>
+  
+  //equivalent to the fetch.txt
+<span class="fc" id="L44">  private List&lt;FetchItem&gt; itemsToFetch = new ArrayList&lt;&gt;();</span>
+  
+  //equivalent to the bag-info.txt 
+<span class="fc" id="L47">  private Metadata metadata = new Metadata();</span>
+  
+  //the current location of the bag on the filesystem
+  private Path rootDir;
+  
+  /**
+   * empty bag with an invalid version
+   */
+<span class="fc" id="L55">  public Bag(){</span>
+    //intentionally empty
+<span class="fc" id="L57">  }</span>
+  
+  /**
+   * empty bag with the specified bag version
+   * 
+   * @param version the version of the bag
+   */
+<span class="fc" id="L64">  public Bag(final Version version){</span>
+<span class="fc" id="L65">    this.version = version;</span>
+<span class="fc" id="L66">  }</span>
+  
+  /**
+   * Create a new bag with the same values as the supplied bag
+   * 
+   * @param bag the bag to clone
+   */
+<span class="fc" id="L73">  public Bag(final Bag bag){</span>
+<span class="fc" id="L74">    this.version = bag.getVersion();</span>
+<span class="fc" id="L75">    this.fileEncoding = bag.fileEncoding;</span>
+<span class="fc" id="L76">    this.itemsToFetch = bag.getItemsToFetch();</span>
+<span class="fc" id="L77">    this.metadata = bag.getMetadata();</span>
+<span class="fc" id="L78">    this.payLoadManifests = bag.getPayLoadManifests();</span>
+<span class="fc" id="L79">    this.tagManifests = bag.getTagManifests();</span>
+<span class="fc" id="L80">    this.rootDir = bag.getRootDir();</span>
+<span class="fc" id="L81">  }</span>
+  
+  public Version getVersion(){
+<span class="fc" id="L84">    return version;</span>
+  }
+
+  public Set&lt;Manifest&gt; getPayLoadManifests() {
+<span class="fc" id="L88">    return payLoadManifests;</span>
+  }
+
+  public void setPayLoadManifests(final Set&lt;Manifest&gt; payLoadManifests) {
+<span class="nc" id="L92">    this.payLoadManifests = payLoadManifests;</span>
+<span class="nc" id="L93">  }</span>
+
+  public Set&lt;Manifest&gt; getTagManifests() {
+<span class="fc" id="L96">    return tagManifests;</span>
+  }
+
+  public void setTagManifests(final Set&lt;Manifest&gt; tagManifests) {
+<span class="fc" id="L100">    this.tagManifests = tagManifests;</span>
+<span class="fc" id="L101">  }</span>
+
+  public List&lt;FetchItem&gt; getItemsToFetch() {
+<span class="fc" id="L104">    return itemsToFetch;</span>
+  }
+
+  public void setItemsToFetch(final List&lt;FetchItem&gt; itemsToFetch) {
+<span class="nc" id="L108">    this.itemsToFetch = itemsToFetch;</span>
+<span class="nc" id="L109">  }</span>
+
+  public Metadata getMetadata() {
+<span class="fc" id="L112">    return metadata;</span>
+  }
+
+  public void setMetadata(final Metadata metadata) {
+<span class="fc" id="L116">    this.metadata = metadata;</span>
+<span class="fc" id="L117">  }</span>
+
+  public Charset getFileEncoding() {
+<span class="fc" id="L120">    return fileEncoding;</span>
+  }
+
+  public void setFileEncoding(final Charset fileEncoding) {
+<span class="fc" id="L124">    this.fileEncoding = fileEncoding;</span>
+<span class="fc" id="L125">  }</span>
+
+  @Override
+  public String toString() {
+<span class="fc" id="L129">    final StringBuilder sb = new StringBuilder(95);</span>
+<span class="fc" id="L130">    sb.append(&quot;Bag [version=&quot;).append(version)</span>
+<span class="fc" id="L131">    .append(&quot;, fileEncoding=&quot;).append(fileEncoding)</span>
+<span class="fc" id="L132">    .append(&quot;, payLoadManifests=[&quot;);</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">    for(final Manifest payloadManifest : payLoadManifests){</span>
+<span class="fc" id="L134">      sb.append(payloadManifest).append(' ');</span>
+<span class="fc" id="L135">    }</span>
+<span class="fc" id="L136">    sb.append(&quot;], tagManifests=[&quot;);</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">    for(final Manifest tagManifest : tagManifests){</span>
+<span class="fc" id="L138">      sb.append(tagManifest).append(' ');</span>
+<span class="fc" id="L139">    }</span>
+<span class="fc" id="L140">    sb.append(&quot;], itemsToFetch=&quot;).append(itemsToFetch)</span>
+<span class="fc" id="L141">    .append(&quot;, metadata=&quot;).append(metadata).append(']');</span>
+    
+<span class="fc" id="L143">    return sb.toString();</span>
+  }
+
+  @Override
+  public int hashCode() {
+<span class="fc" id="L148">    return Objects.hash(version) + Objects.hash(fileEncoding) + Objects.hash(payLoadManifests) + </span>
+<span class="fc" id="L149">        Objects.hash(tagManifests) + Objects.hash(itemsToFetch) + Objects.hash(metadata);</span>
+  }
+
+  @Override
+  public boolean equals(final Object obj) {
+<span class="fc bfc" id="L154" title="All 2 branches covered.">    if (this == obj){</span>
+<span class="fc" id="L155">      return true;</span>
+    }
+<span class="fc bfc" id="L157" title="All 2 branches covered.">    if (obj == null){</span>
+<span class="fc" id="L158">      return false;</span>
+    }
+<span class="fc bfc" id="L160" title="All 2 branches covered.">    if (!(obj instanceof Bag)){</span>
+<span class="fc" id="L161">      return false;</span>
+    }
+    
+<span class="fc" id="L164">    final Bag other = (Bag) obj;</span>
+<span class="pc bpc" id="L165" title="1 of 2 branches missed.">    return Objects.equals(this.version, other.getVersion()) &amp;&amp; </span>
+<span class="pc bpc" id="L166" title="1 of 2 branches missed.">        Objects.equals(this.fileEncoding, other.getFileEncoding()) &amp;&amp;</span>
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">        Objects.equals(this.payLoadManifests, other.getPayLoadManifests()) &amp;&amp; </span>
+<span class="pc bpc" id="L168" title="1 of 2 branches missed.">        Objects.equals(this.tagManifests, other.getTagManifests()) &amp;&amp;</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">        Objects.equals(this.itemsToFetch, other.getItemsToFetch()) &amp;&amp;</span>
+<span class="pc bpc" id="L170" title="1 of 2 branches missed.">        Objects.equals(this.metadata, other.getMetadata());</span>
+  }
+
+  public Path getRootDir() {
+<span class="fc" id="L174">    return rootDir;</span>
+  }
+
+  public void setRootDir(final Path rootDir) {
+<span class="fc" id="L178">    this.rootDir = rootDir;</span>
+<span class="fc" id="L179">  }</span>
+
+  public void setVersion(final Version version) {
+<span class="fc" id="L182">    this.version = version;</span>
+<span class="fc" id="L183">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

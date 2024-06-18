@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="description" content="None" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>dans-bagit-lib</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Manual";
+        var mkdocs_page_input_path = "index.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <script src="js/jquery-3.6.0.min.js" defer></script>
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/highlight.min.js"></script>
+      <script>hljs.initHighlightingOnLoad();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="." class="icon icon-home"> dans-bagit-lib
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="./search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href=".">Manual</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#description">DESCRIPTION</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#installation">INSTALLATION</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="getting-started/">Getting started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="javadoc/">JavaDoc</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="api/">Maven project info</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="dev/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href=".">dans-bagit-lib</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="." class="icon icon-home" alt="Docs"></a> &raquo;</li><li>Manual</li>
+    <li class="wy-breadcrumbs-aside">
+        <a href="https://github.com/DANS-KNAW/dans-bagit-lib/edit/master/docs/index.md"> Edit on DANS-KNAW/dans-bagit-lib</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="manual">MANUAL<a class="headerlink" href="#manual" title="Permanent link">&para;</a></h1>
+<p>Library with classes and functions for working with the BagIt format</p>
+<h2 id="description">DESCRIPTION<a class="headerlink" href="#description" title="Permanent link">&para;</a></h2>
+<p>BagIt is a set of hierarchical file layout conventions designed to
+support storage and transfer of arbitrary digital content. A "bag"
+consists of a directory containing the payload files and other
+accompanying metadata files known as "tag" files. The "tags" are
+metadata files intended to facilitate and document the storage and
+transfer of the bag. Processing a bag does not require any
+understanding of the payload file contents, and the payload files can
+be accessed without processing the BagIt metadata.</p>
+<p>This BagIt library is a software library intended to support the creation,
+manipulation, and validation of bags. Its current version is 0.97. It is version aware with the earliest
+supported version being 0.93.</p>
+<p>See: <a href="https://datatracker.ietf.org/doc/html/rfc8493" target="_blank">https://datatracker.ietf.org/doc/html/rfc8493</a>.</p>
+<p>This library was first developed by the <a href="https://github.com/LibraryOfCongress/bagit-java/" target="_blank:">LibraryOfCongress</a> and
+forked by DANS-KNAW.</p>
+<h2 id="installation">INSTALLATION<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>To use this library in a Maven-based project:</p>
+<ol>
+<li>
+<p>Include in your <code>pom.xml</code> a declaration for the DANS maven repository:</p>
+<pre class="codehilite"><code>&lt;repositories&gt;
+    &lt;!-- possibly other repository declarations here ... --&gt;
+    &lt;repository&gt;
+        &lt;id&gt;DANS&lt;/id&gt;
+        &lt;releases&gt;
+            &lt;enabled&gt;true&lt;/enabled&gt;
+        &lt;/releases&gt;
+        &lt;url&gt;https://maven.dans.knaw.nl/releases/&lt;/url&gt;
+    &lt;/repository&gt;
+&lt;/repositories&gt;
+</code></pre>
+
+</li>
+<li>
+<p>Include a dependency on this library.</p>
+<pre class="codehilite"><code>&lt;dependency&gt;
+    &lt;groupId&gt;nl.knaw.dans&lt;/groupId&gt;
+    &lt;artifactId&gt;dans-bagit-lib&lt;/artifactId&gt;
+    &lt;version&gt;{version}&lt;/version&gt; &lt;!-- &lt;=== FILL LIBRARY VERSION TO USE HERE --&gt;
+&lt;/dependency&gt;
+</code></pre>
+
+</li>
+</ol>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="getting-started/" class="btn btn-neutral float-right" title="Getting started">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+    
+      <span><a href="getting-started/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script>var base_url = '.';</script>
+    <script src="js/theme_extra.js" defer></script>
+    <script src="js/theme.js" defer></script>
+      <script src="search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
+
+</body>
+</html>
+
+<!--
+MkDocs version : 1.3.0
+Build Date UTC : 2024-06-18 11:01:56.313119+00:00
+-->

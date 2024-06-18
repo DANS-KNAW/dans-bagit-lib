@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BagProfileChecker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.conformance</a> &gt; <span class="el_source">BagProfileChecker.java</span></div><h1>BagProfileChecker.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.conformance;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.ResourceBundle;
+import java.util.Set;
+
+import nl.knaw.dans.bagit.conformance.profile.BagInfoRequirement;
+import nl.knaw.dans.bagit.conformance.profile.BagitProfile;
+import nl.knaw.dans.bagit.conformance.profile.BagitProfileDeserializer;
+import nl.knaw.dans.bagit.domain.Bag;
+import nl.knaw.dans.bagit.domain.FetchItem;
+import nl.knaw.dans.bagit.domain.Manifest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
+
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+
+import nl.knaw.dans.bagit.domain.Metadata;
+import nl.knaw.dans.bagit.exceptions.conformance.BagitVersionIsNotAcceptableException;
+import nl.knaw.dans.bagit.exceptions.conformance.FetchFileNotAllowedException;
+import nl.knaw.dans.bagit.exceptions.conformance.MetatdataValueIsNotAcceptableException;
+import nl.knaw.dans.bagit.exceptions.conformance.MetatdataValueIsNotRepeatableException;
+import nl.knaw.dans.bagit.exceptions.conformance.RequiredManifestNotPresentException;
+import nl.knaw.dans.bagit.exceptions.conformance.RequiredMetadataFieldNotPresentException;
+import nl.knaw.dans.bagit.exceptions.conformance.RequiredTagFileNotPresentException;
+
+/**
+ * Responsible for checking a bag against a profile
+ */
+public final class BagProfileChecker {
+<span class="fc" id="L57">  private static final Logger logger = LoggerFactory.getLogger(BagProfileChecker.class);</span>
+<span class="fc" id="L58">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+
+  private BagProfileChecker(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Check a bag against a bagit-profile as described by 
+   * &lt;a href=&quot;https://github.com/ruebot/bagit-profiles&quot;&gt;https://github.com/ruebot/bagit-profiles&lt;/a&gt;
+   * &lt;br&gt;Note: &lt;b&gt; This implementation does not check the Serialization part of the profile!&lt;/b&gt;
+   * 
+   * @param jsonProfile the input stream to the json string describing the profile
+   * @param bag the bag to check against the profile
+   * 
+   * @throws IOException if there is a problem reading the profile
+   * @throws JsonMappingException if there is a problem mapping the profile to the {@link BagitProfile}
+   * @throws JsonParseException if there is a problem parsing the json while mapping to java object
+   * 
+   * @throws FetchFileNotAllowedException if there is a fetch file when the profile prohibits it
+   * @throws MetatdataValueIsNotAcceptableException if a metadata value is not in the list of acceptable values
+   * @throws MetatdataValueIsNotRepeatableException if a metadata value shows up more than once when not repeatable
+   * @throws RequiredMetadataFieldNotPresentException if a metadata field is not present but it should be
+   * @throws RequiredManifestNotPresentException if a payload or tag manifest type is not present but should be
+   * @throws BagitVersionIsNotAcceptableException if the version of the bag is not in the list of acceptable versions
+   * @throws RequiredTagFileNotPresentException if a tag file is not present but should be
+   */
+  public static void bagConformsToProfile(final InputStream jsonProfile, final Bag bag) throws JsonParseException, JsonMappingException,
+  IOException, FetchFileNotAllowedException, RequiredMetadataFieldNotPresentException, MetatdataValueIsNotAcceptableException, 
+  RequiredManifestNotPresentException, BagitVersionIsNotAcceptableException, RequiredTagFileNotPresentException, MetatdataValueIsNotRepeatableException{
+    
+<span class="fc" id="L88">    final BagitProfile profile = parseBagitProfile(jsonProfile);</span>
+<span class="fc" id="L89">    checkFetch(bag.getRootDir(), profile.isFetchFileAllowed(), bag.getItemsToFetch());</span>
+    
+<span class="fc" id="L91">    checkMetadata(bag.getMetadata(), profile.getBagInfoRequirements());</span>
+    
+<span class="fc" id="L93">    requiredManifestsExist(bag.getPayLoadManifests(), profile.getManifestTypesRequired(), true);</span>
+
+<span class="fc" id="L95">    requiredManifestsExist(bag.getTagManifests(), profile.getTagManifestTypesRequired(), false);</span>
+
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    if(!profile.getAcceptableBagitVersions().contains(bag.getVersion().toString())){</span>
+<span class="fc" id="L98">      throw new BagitVersionIsNotAcceptableException(messages.getString(&quot;bagit_version_not_acceptable_error&quot;), bag.getVersion(), profile.getAcceptableBagitVersions());</span>
+    }
+    
+<span class="fc" id="L101">    requiredTagFilesExist(bag.getRootDir(), profile.getTagFilesRequired());</span>
+<span class="fc" id="L102">  }</span>
+  
+  private static BagitProfile parseBagitProfile(final InputStream jsonProfile) throws JsonParseException, JsonMappingException, IOException{
+<span class="fc" id="L105">    final ObjectMapper mapper = new ObjectMapper();</span>
+<span class="fc" id="L106">    final SimpleModule module = new SimpleModule();</span>
+<span class="fc" id="L107">    module.addDeserializer(BagitProfile.class, new BagitProfileDeserializer());</span>
+<span class="fc" id="L108">    mapper.registerModule(module);</span>
+
+<span class="fc" id="L110">    return mapper.readValue(jsonProfile, BagitProfile.class);</span>
+  }
+  
+  private static void checkFetch(final Path rootDir, final boolean allowFetchFile, final List&lt;FetchItem&gt; itemsToFetch) throws FetchFileNotAllowedException{
+<span class="fc" id="L114">    logger.debug(messages.getString(&quot;checking_fetch_file_allowed&quot;), rootDir);</span>
+<span class="pc bpc" id="L115" title="1 of 4 branches missed.">    if(!allowFetchFile &amp;&amp; !itemsToFetch.isEmpty()){</span>
+<span class="fc" id="L116">      throw new FetchFileNotAllowedException(messages.getString(&quot;fetch_file_not_allowed_error&quot;), rootDir);</span>
+    }
+<span class="fc" id="L118">  }</span>
+  
+  private static void checkMetadata(final Metadata bagMetadata, final Map&lt;String, BagInfoRequirement&gt; bagInfoEntryRequirements)
+      throws RequiredMetadataFieldNotPresentException, MetatdataValueIsNotAcceptableException, MetatdataValueIsNotRepeatableException{
+    
+<span class="fc bfc" id="L123" title="All 2 branches covered.">    for(final Entry&lt;String, BagInfoRequirement&gt; bagInfoEntryRequirement : bagInfoEntryRequirements.entrySet()){</span>
+<span class="fc" id="L124">      final boolean metadataContainsKey = bagMetadata.contains(bagInfoEntryRequirement.getKey());</span>
+      
+<span class="fc" id="L126">      checkIfMetadataEntryIsRequired(bagInfoEntryRequirement, metadataContainsKey);</span>
+      
+<span class="fc" id="L128">      checkForAcceptableValues(bagMetadata, bagInfoEntryRequirement);</span>
+      
+<span class="fc" id="L130">      checkForNoneRepeatableMetadata(bagMetadata, bagInfoEntryRequirement, metadataContainsKey);</span>
+<span class="fc" id="L131">    }</span>
+<span class="fc" id="L132">  }</span>
+  
+  private static void checkIfMetadataEntryIsRequired(final Entry&lt;String, BagInfoRequirement&gt; bagInfoEntryRequirement, final boolean metadataContainsKey) throws RequiredMetadataFieldNotPresentException{
+<span class="fc" id="L135">    logger.debug(messages.getString(&quot;checking_metadata_entry_required&quot;), bagInfoEntryRequirement.getKey());</span>
+    //is it required and not there?
+<span class="fc bfc" id="L137" title="All 4 branches covered.">    if(bagInfoEntryRequirement.getValue().isRequired() &amp;&amp; !metadataContainsKey){</span>
+<span class="fc" id="L138">      throw new RequiredMetadataFieldNotPresentException(messages.getString(&quot;required_metadata_field_not_present_error&quot;), bagInfoEntryRequirement.getKey());</span>
+    }
+<span class="fc" id="L140">  }</span>
+  
+  private static void checkForAcceptableValues(final Metadata bagMetadata, final Entry&lt;String, BagInfoRequirement&gt; bagInfoEntryRequirement) throws MetatdataValueIsNotAcceptableException{
+    //a size of zero implies that all values are acceptable
+<span class="fc bfc" id="L144" title="All 2 branches covered.">    if(!bagInfoEntryRequirement.getValue().getAcceptableValues().isEmpty()){</span>
+<span class="fc" id="L145">      logger.debug(messages.getString(&quot;check_values_acceptable&quot;), bagInfoEntryRequirement.getKey());</span>
+<span class="fc bfc" id="L146" title="All 2 branches covered.">      for(final String metadataValue : bagMetadata.get(bagInfoEntryRequirement.getKey())){</span>
+<span class="fc bfc" id="L147" title="All 2 branches covered.">        if(!bagInfoEntryRequirement.getValue().getAcceptableValues().contains(metadataValue)){</span>
+<span class="fc" id="L148">          throw new MetatdataValueIsNotAcceptableException(messages.getString(&quot;metadata_value_not_acceptable_error&quot;), </span>
+<span class="fc" id="L149">              bagInfoEntryRequirement.getKey(), bagInfoEntryRequirement.getValue().getAcceptableValues(), metadataValue);</span>
+        }
+<span class="fc" id="L151">      }</span>
+    }
+<span class="fc" id="L153">  }</span>
+  
+  private static void checkForNoneRepeatableMetadata(final Metadata bagMetadata, final Entry&lt;String, BagInfoRequirement&gt; bagInfoEntryRequirement, final boolean metadataContainsKey) throws MetatdataValueIsNotRepeatableException{
+    //if it is none repeatable, but shows up multiple times
+<span class="pc bpc" id="L157" title="1 of 4 branches missed.">    if(!bagInfoEntryRequirement.getValue().isRepeatable() &amp;&amp; metadataContainsKey </span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">        &amp;&amp; bagMetadata.get(bagInfoEntryRequirement.getKey()).size() &gt; 1){</span>
+<span class="fc" id="L159">      throw new MetatdataValueIsNotRepeatableException(messages.getString(&quot;metadata_value_not_repeatable_error&quot;), bagInfoEntryRequirement.getKey());</span>
+    }
+<span class="fc" id="L161">  }</span>
+  
+  @SuppressWarnings(&quot;PMD.AvoidInstantiatingObjectsInLoops&quot;)
+  private static void requiredManifestsExist(final Set&lt;Manifest&gt; manifests, final List&lt;String&gt; requiredManifestTypes, final boolean isPayloadManifest) throws RequiredManifestNotPresentException{
+<span class="fc" id="L165">    final Set&lt;String&gt; manifestTypesPresent = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L166">    logger.debug(messages.getString(&quot;check_required_manifests_present&quot;));</span>
+    
+<span class="fc bfc" id="L168" title="All 2 branches covered.">    for(final Manifest manifest : manifests){</span>
+<span class="fc" id="L169">      manifestTypesPresent.add(manifest.getAlgorithm().getBagitName());</span>
+<span class="fc" id="L170">    }</span>
+    
+<span class="fc bfc" id="L172" title="All 2 branches covered.">    for(final String requiredManifestType : requiredManifestTypes){</span>
+<span class="fc bfc" id="L173" title="All 2 branches covered.">      if(!manifestTypesPresent.contains(requiredManifestType)){</span>
+<span class="fc" id="L174">        final StringBuilder sb = new StringBuilder();</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">        if(isPayloadManifest){ sb.append(&quot;tag&quot;);</span>
+<span class="fc" id="L176">          sb.append(MessageFormatter.format(messages.getString(&quot;required_tag_manifest_type_not_present&quot;), requiredManifestType).getMessage());</span>
+        }
+        else{
+<span class="fc" id="L179">          sb.append(MessageFormatter.format(messages.getString(&quot;required_manifest_type_not_present&quot;), requiredManifestType).getMessage());</span>
+        }
+          
+<span class="fc" id="L182">        throw new RequiredManifestNotPresentException(sb.toString());</span>
+      }
+<span class="fc" id="L184">    }</span>
+<span class="fc" id="L185">  }</span>
+  
+  private static void requiredTagFilesExist(final Path rootDir, final List&lt;String&gt; requiredTagFilePaths) throws RequiredTagFileNotPresentException{
+    Path requiredTagFile;
+<span class="fc" id="L189">    logger.debug(messages.getString(&quot;checking_required_tag_file_exists&quot;));</span>
+    
+<span class="fc bfc" id="L191" title="All 2 branches covered.">    for(final String requiredTagFilePath : requiredTagFilePaths){</span>
+<span class="fc" id="L192">      requiredTagFile = rootDir.resolve(requiredTagFilePath);</span>
+<span class="fc bfc" id="L193" title="All 2 branches covered.">      if(!Files.exists(requiredTagFile)){</span>
+<span class="fc" id="L194">        throw new RequiredTagFileNotPresentException(messages.getString(&quot;required_tag_file_not_found_error&quot;), requiredTagFilePath);</span>
+      }
+<span class="fc" id="L196">    }</span>
+<span class="fc" id="L197">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

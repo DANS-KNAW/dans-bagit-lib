@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BagitWarning.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.conformance</a> &gt; <span class="el_source">BagitWarning.java</span></div><h1>BagitWarning.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.conformance;
+
+import java.util.ResourceBundle;
+
+/**
+ * The BagIt specification is very flexible in what it allows. 
+ * This leads to situations where something may be technically allowed, but should be discouraged. 
+ * This class is for that purpose, to allow reporting of these allowed but discouraged situations to the user.
+ */
+<span class="fc" id="L25">public enum BagitWarning {</span>
+<span class="fc" id="L26">  BAG_WITHIN_A_BAG(&quot;bag_within_a_bag&quot;),</span>
+<span class="fc" id="L27">  DIFFERENT_CASE(&quot;different_case&quot;),</span>
+<span class="fc" id="L28">  DIFFERENT_NORMALIZATION(&quot;different_normalization&quot;),</span>
+<span class="fc" id="L29">  EXTRA_LINES_IN_BAGIT_FILES(&quot;extra_lines_in_bagit_files&quot;),</span>
+<span class="fc" id="L30">  LEADING_DOT_SLASH(&quot;leading_dot_slash&quot;),</span>
+<span class="fc" id="L31">  NON_STANDARD_ALGORITHM(&quot;non_standard_algorithm&quot;),</span>
+<span class="fc" id="L32">  MD5SUM_TOOL_GENERATED_MANIFEST(&quot;md5sum_tool_generated_manifest&quot;),</span>
+<span class="fc" id="L33">  MISSING_TAG_MANIFEST(&quot;missing_tag_manifest&quot;),</span>
+<span class="fc" id="L34">  OLD_BAGIT_VERSION(&quot;old_bagit_version&quot;),</span>
+<span class="fc" id="L35">  OS_SPECIFIC_FILES(&quot;os_specific_files&quot;),</span>
+<span class="fc" id="L36">  PAYLOAD_OXUM_MISSING(&quot;payload_oxum_missing&quot;),</span>
+<span class="fc" id="L37">  TAG_FILES_ENCODING(&quot;tag_files_encoding&quot;),</span>
+<span class="fc" id="L38">  WEAK_CHECKSUM_ALGORITHM(&quot;weak_checksum_algorithm&quot;),</span>
+<span class="fc" id="L39">  MANIFEST_SETS_DIFFER(&quot;manifest_file_sets_differ_between_algorithms&quot;);</span>
+  
+  private final String messageBundleKey;
+<span class="fc" id="L42">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+<span class="fc" id="L44">  private BagitWarning(final String reason){</span>
+<span class="fc" id="L45">    this.messageBundleKey = reason;</span>
+<span class="fc" id="L46">  }</span>
+
+  public String getReason() {
+<span class="nc" id="L49">    return messages.getString(messageBundleKey);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

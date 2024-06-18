@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ManifestChecker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.conformance</a> &gt; <span class="el_source">ManifestChecker.java</span></div><h1>ManifestChecker.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.conformance;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ResourceBundle;
+import java.util.Set;
+
+import nl.knaw.dans.bagit.domain.Manifest;
+import nl.knaw.dans.bagit.exceptions.InvalidBagitFileFormatException;
+import nl.knaw.dans.bagit.exceptions.MaliciousPathException;
+import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
+import nl.knaw.dans.bagit.hash.StandardBagitAlgorithmNameToSupportedAlgorithmMapping;
+import nl.knaw.dans.bagit.reader.ManifestReader;
+import nl.knaw.dans.bagit.util.PathUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
+
+import nl.knaw.dans.bagit.domain.Version;
+
+/**
+ * Part of the BagIt conformance suite. 
+ * This checker checks for various problems related to the manifests in a bag.
+ */
+//TODO refactor to remove PMD warnings!
+@SuppressWarnings({&quot;PMD.UseLocaleWithCaseConversions&quot;, &quot;PMD.TooManyMethods&quot;, &quot;PMD.GodClass&quot;})
+public final class ManifestChecker {
+<span class="fc" id="L52">  private static final Logger logger = LoggerFactory.getLogger(ManifestChecker.class);</span>
+<span class="fc" id="L53">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+  private static final String THUMBS_DB_FILE = &quot;[Tt][Hh][Uu][Mm][Bb][Ss]\\.[Dd][Bb]&quot;;
+  private static final String DS_STORE_FILE = &quot;\\.[Dd][Ss]_[Ss][Tt][Oo][Rr][Ee]&quot;;
+  private static final String SPOTLIGHT_FILE = &quot;\\.[Ss][Pp][Oo][Tt][Ll][Ii][Gg][Hh][Tt]-[Vv]100&quot;;
+  private static final String TRASHES_FILE = &quot;\\.(_.)?[Tt][Rr][Aa][Ss][Hh][Ee][Ss]&quot;;
+  private static final String FS_EVENTS_FILE = &quot;\\.[Ff][Ss][Ee][Vv][Ee][Nn][Tt][Ss][Dd]&quot;;
+  private static final String OS_FILES_REGEX = &quot;.*data/(&quot; + THUMBS_DB_FILE + &quot;|&quot; + DS_STORE_FILE + &quot;|&quot; + SPOTLIGHT_FILE + &quot;|&quot; + TRASHES_FILE + &quot;|&quot; + FS_EVENTS_FILE + &quot;)&quot;;
+<span class="fc" id="L61">  private static final Version VERSION_1_0 = new Version(1,0);</span>
+  
+  private ManifestChecker(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Check for all the manifest specific potential problems
+   * 
+   * @param version the version of the bag we are checking
+   * @param bagitDir the directory where the manifests are stored
+   * @param encoding the encoding of the manifests
+   * @param warnings the set of warnings that will be appended to while checking
+   * @param warningsToIgnore the set of warnings to ignore
+   * 
+   * @throws IOException if there is a problem reading a file (because it doesn't exist) 
+   * @throws InvalidBagitFileFormatException if one (or more) of the files does not match the formatting as specified in the specification
+   * @throws MaliciousPathException if someone crafted the bag to specifically try and write outside the bag directory
+   * @throws UnsupportedAlgorithmException if a manifest uses an algorithm that the computer doesn't know how to use
+   */
+  public static void checkManifests(final Version version, final Path bagitDir, final Charset encoding, final Set&lt;BagitWarning&gt; warnings, 
+      final Collection&lt;BagitWarning&gt; warningsToIgnore) throws IOException, InvalidBagitFileFormatException, MaliciousPathException, UnsupportedAlgorithmException{
+        
+<span class="fc" id="L84">    boolean missingTagManifest = true;</span>
+<span class="fc" id="L85">    final List&lt;Path&gt; payloadManifests = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L86">    final List&lt;Path&gt; tagManifests = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L87">    try(final DirectoryStream&lt;Path&gt; files = Files.newDirectoryStream(bagitDir)){</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">      for(final Path file : files){</span>
+<span class="fc bfc" id="L89" title="All 4 branches covered.">        missingTagManifest = missingTagManifest &amp;&amp; checkManifest(file, payloadManifests, tagManifests, encoding, warnings, warningsToIgnore);</span>
+<span class="fc" id="L90">      }</span>
+    }
+    
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">    if(!warnings.contains(BagitWarning.MANIFEST_SETS_DIFFER)){</span>
+<span class="fc" id="L94">      checkManifestSets(version, tagManifests, payloadManifests, warnings, encoding);</span>
+    }
+    
+<span class="pc bpc" id="L97" title="1 of 4 branches missed.">    if(!warningsToIgnore.contains(BagitWarning.MISSING_TAG_MANIFEST) &amp;&amp; missingTagManifest){</span>
+<span class="fc" id="L98">      logger.warn(messages.getString(&quot;bag_missing_tag_manifest_warning&quot;), bagitDir);</span>
+<span class="fc" id="L99">      warnings.add(BagitWarning.MISSING_TAG_MANIFEST);</span>
+    }
+<span class="fc" id="L101">  }</span>
+  
+  private static boolean checkManifest(final Path file, final List&lt;Path&gt; payloadManifests, final List&lt;Path&gt; tagManifests, 
+      final Charset encoding, final Set&lt;BagitWarning&gt; warnings, 
+      final Collection&lt;BagitWarning&gt; warningsToIgnore) throws IOException, InvalidBagitFileFormatException{
+<span class="fc" id="L106">    boolean missingTagManifest = true;</span>
+<span class="fc" id="L107">    final String filename = PathUtils.getFilename(file);</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">    if(filename.contains(&quot;manifest-&quot;)){</span>
+<span class="fc bfc" id="L109" title="All 2 branches covered.">      if(filename.startsWith(&quot;manifest-&quot;)){</span>
+<span class="fc" id="L110">        payloadManifests.add(file);</span>
+<span class="fc" id="L111">        checkManifestPayload(file, encoding, warnings, warningsToIgnore, true);</span>
+      }
+      else{
+<span class="fc" id="L114">        tagManifests.add(file);</span>
+<span class="fc" id="L115">        checkManifestPayload(file, encoding, warnings, warningsToIgnore, false);</span>
+<span class="fc" id="L116">        missingTagManifest = false;</span>
+      }
+      
+<span class="fc" id="L119">      final String algorithm = filename.split(&quot;[-\\.]&quot;)[1];</span>
+<span class="fc" id="L120">      checkAlgorthm(algorithm, warnings, warningsToIgnore);</span>
+    }
+    
+<span class="fc" id="L123">    return missingTagManifest;</span>
+  }
+  
+  /*
+   * Check for a &quot;bag within a bag&quot;, relative paths, and OS specific files in the manifests
+   */
+  private static void checkManifestPayload(final Path manifestFile, final Charset encoding, final Set&lt;BagitWarning&gt; warnings, 
+      final Collection&lt;BagitWarning&gt; warningsToIgnore, final boolean isPayloadManifest) 
+          throws IOException, InvalidBagitFileFormatException{
+    
+<span class="fc" id="L133">    try(final BufferedReader reader = Files.newBufferedReader(manifestFile, encoding)){</span>
+<span class="fc" id="L134">      final Set&lt;String&gt; paths = new HashSet&lt;&gt;();</span>
+      
+<span class="fc" id="L136">      String line = reader.readLine();</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">      while(line != null){</span>
+<span class="fc" id="L138">        String path = parsePath(line);</span>
+        
+<span class="fc" id="L140">        path = checkForManifestCreatedWithMD5SumTools(path, warnings, warningsToIgnore);</span>
+        
+<span class="fc" id="L142">        checkForDifferentCase(path, paths, manifestFile, warnings, warningsToIgnore);</span>
+<span class="fc" id="L143">        paths.add(path.toLowerCase());</span>
+        
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">        if(encoding.name().startsWith(&quot;UTF&quot;)){</span>
+<span class="fc" id="L146">          checkNormalization(path, manifestFile.getParent(), warnings, warningsToIgnore);</span>
+        }
+<span class="fc" id="L148">        checkForBagWithinBag(line, warnings, warningsToIgnore, isPayloadManifest);</span>
+<span class="fc" id="L149">        checkForRelativePaths(line, warnings, warningsToIgnore, manifestFile);</span>
+<span class="fc" id="L150">        checkForOSSpecificFiles(line, warnings, warningsToIgnore, manifestFile);</span>
+        
+<span class="fc" id="L152">        line = reader.readLine();</span>
+<span class="fc" id="L153">      }</span>
+    }
+<span class="fc" id="L155">  }</span>
+  
+  /*
+   * Check to make sure it conforms to &lt;hash&gt; &lt;path&gt;
+   */
+  static String parsePath(final String line) throws InvalidBagitFileFormatException{
+<span class="fc" id="L161">    final String[] parts = line.split(&quot;\\s+&quot;, 2);</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">    if(parts.length &lt; 2){</span>
+<span class="fc" id="L163">      final String formattedMessage = messages.getString(&quot;manifest_line_violated_spec_error&quot;);</span>
+<span class="fc" id="L164">      throw new InvalidBagitFileFormatException(MessageFormatter.format(formattedMessage, line).getMessage());</span>
+    }
+    
+<span class="fc" id="L167">    return parts[1];</span>
+  }
+  
+  /*
+   * We allow for MD5sum tools for compatibility but it is not recommended
+   */
+  private static String checkForManifestCreatedWithMD5SumTools(final String path, final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore){
+<span class="fc" id="L174">    String fixedPath = path;</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">    final boolean startsWithStar = path.charAt(0) == '*';</span>
+    
+<span class="fc bfc" id="L177" title="All 2 branches covered.">    if(startsWithStar){</span>
+<span class="fc" id="L178">      fixedPath = path.substring(1);</span>
+    }
+    
+<span class="pc bpc" id="L181" title="1 of 4 branches missed.">    if(!warningsToIgnore.contains(BagitWarning.MD5SUM_TOOL_GENERATED_MANIFEST) &amp;&amp; startsWithStar){</span>
+<span class="fc" id="L182">      logger.warn(messages.getString(&quot;md5sum_generated_line_warning&quot;), path);</span>
+<span class="fc" id="L183">      warnings.add(BagitWarning.MD5SUM_TOOL_GENERATED_MANIFEST);</span>
+    }
+    
+<span class="fc" id="L186">    return fixedPath;</span>
+  }
+  
+  /*
+   * Check that the same line doesn't already exist in the set of paths
+   */
+  private static void checkForDifferentCase(final String path, final Set&lt;String&gt; paths, final Path manifestFile, 
+      final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore){
+<span class="fc bfc" id="L194" title="All 4 branches covered.">    if(!warningsToIgnore.contains(BagitWarning.DIFFERENT_CASE) &amp;&amp; paths.contains(path.toLowerCase())){</span>
+<span class="fc" id="L195">      logger.warn(messages.getString(&quot;different_case_warning&quot;), manifestFile, path);</span>
+<span class="fc" id="L196">      warnings.add(BagitWarning.DIFFERENT_CASE);</span>
+    }
+<span class="fc" id="L198">  }</span>
+  
+  /*
+   * Check that the file specified has not changed its normalization (i.e. have the bytes changed but it still looks the same?)
+   */
+  private static void checkNormalization(final String path, final Path rootDir, final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore) throws IOException{
+<span class="fc bfc" id="L204" title="All 2 branches covered.">    if(!warningsToIgnore.contains(BagitWarning.DIFFERENT_NORMALIZATION)){</span>
+      
+<span class="fc" id="L206">      final Path fileToCheck = rootDir.resolve(path).normalize();</span>
+<span class="fc" id="L207">      final Path dirToCheck = fileToCheck.getParent();</span>
+<span class="pc bpc" id="L208" title="1 of 2 branches missed.">      if(dirToCheck == null){ </span>
+<span class="nc" id="L209">        final String formattedMessage = messages.getString(&quot;cannot_access_parent_path_error&quot;);</span>
+<span class="nc" id="L210">        throw new IOException(MessageFormatter.format(formattedMessage, fileToCheck).getMessage()); //to satisfy findbugs</span>
+      }
+<span class="fc" id="L212">      final String normalizedFileToCheck = normalizePathToNFD(fileToCheck);</span>
+      
+<span class="fc" id="L214">      try(final DirectoryStream&lt;Path&gt; files = Files.newDirectoryStream(dirToCheck)){</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">        for(final Path file : files){</span>
+<span class="fc" id="L216">          final String normalizedFile = normalizePathToNFD(file);</span>
+          
+<span class="fc bfc" id="L218" title="All 4 branches covered.">          if(!file.equals(fileToCheck) &amp;&amp; normalizedFileToCheck.equals(normalizedFile)){</span>
+<span class="fc" id="L219">            logger.warn(messages.getString(&quot;different_normalization_in_manifest_warning&quot;), fileToCheck);</span>
+<span class="fc" id="L220">            warnings.add(BagitWarning.DIFFERENT_NORMALIZATION);</span>
+          }
+<span class="fc" id="L222">        }</span>
+      }
+    }
+<span class="fc" id="L225">  }</span>
+  
+  /*
+   * Normalize to Canonical decomposition.
+   */
+  static String normalizePathToNFD(final Path path){
+<span class="fc" id="L231">    return Normalizer.normalize(path.toString(), Normalizer.Form.NFD);</span>
+  }
+  
+  /*
+   * check for a bag within a bag
+   */
+  private static void checkForBagWithinBag(final String line, final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore, final boolean isPayloadManifest){
+<span class="fc bfc" id="L238" title="All 6 branches covered.">    if(!warningsToIgnore.contains(BagitWarning.BAG_WITHIN_A_BAG) &amp;&amp; isPayloadManifest &amp;&amp; line.contains(&quot;manifest-&quot;)){</span>
+<span class="fc" id="L239">      logger.warn(messages.getString(&quot;bag_within_bag_warning&quot;));</span>
+<span class="fc" id="L240">      warnings.add(BagitWarning.BAG_WITHIN_A_BAG);</span>
+    }
+<span class="fc" id="L242">  }</span>
+  
+  /*
+   * Check for relative paths (i.e. ./) in the manifest
+   */
+  private static void checkForRelativePaths(final String line, final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore, final Path manifestFile){
+<span class="fc bfc" id="L248" title="All 4 branches covered.">    if(!warningsToIgnore.contains(BagitWarning.LEADING_DOT_SLASH) &amp;&amp; line.contains(&quot;./&quot;)){</span>
+<span class="fc" id="L249">      logger.warn(messages.getString(&quot;leading_dot_slash_warning&quot;), manifestFile, line);</span>
+<span class="fc" id="L250">      warnings.add(BagitWarning.LEADING_DOT_SLASH);</span>
+    }
+<span class="fc" id="L252">  }</span>
+  
+  /*
+   * like .DS_Store or Thumbs.db
+   */
+  private static void checkForOSSpecificFiles(final String line, final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore, final Path manifestFile){
+<span class="fc bfc" id="L258" title="All 4 branches covered.">    if(!warningsToIgnore.contains(BagitWarning.OS_SPECIFIC_FILES) &amp;&amp; line.matches(OS_FILES_REGEX)){</span>
+<span class="fc" id="L259">      logger.warn(messages.getString(&quot;os_specific_files_warning&quot;), manifestFile, line);</span>
+<span class="fc" id="L260">      warnings.add(BagitWarning.OS_SPECIFIC_FILES);</span>
+    }
+<span class="fc" id="L262">  }</span>
+  
+  /*
+   * Check for anything weaker than SHA-512
+   */
+  static void checkAlgorthm(final String algorithm, final Set&lt;BagitWarning&gt; warnings, final Collection&lt;BagitWarning&gt; warningsToIgnore){
+<span class="fc" id="L268">    final String upperCaseAlg = algorithm.toUpperCase();</span>
+<span class="fc bfc" id="L269" title="All 2 branches covered.">    if(!warningsToIgnore.contains(BagitWarning.WEAK_CHECKSUM_ALGORITHM) &amp;&amp; </span>
+<span class="fc bfc" id="L270" title="All 4 branches covered.">        (upperCaseAlg.startsWith(&quot;MD&quot;) || upperCaseAlg.matches(&quot;SHA(1|224|256|384)?&quot;))){</span>
+<span class="fc" id="L271">      logger.warn(messages.getString(&quot;weak_algorithm_warning&quot;), algorithm);</span>
+<span class="fc" id="L272">      warnings.add(BagitWarning.WEAK_CHECKSUM_ALGORITHM);</span>
+    }
+    
+<span class="fc bfc" id="L275" title="All 4 branches covered.">    else if(!warningsToIgnore.contains(BagitWarning.NON_STANDARD_ALGORITHM) &amp;&amp; !&quot;SHA512&quot;.equals(upperCaseAlg)){</span>
+<span class="fc" id="L276">      logger.warn(messages.getString(&quot;non_standard_algorithm_warning&quot;), algorithm);</span>
+<span class="fc" id="L277">      warnings.add(BagitWarning.NON_STANDARD_ALGORITHM);</span>
+    }
+<span class="fc" id="L279">  }</span>
+  
+  static void checkManifestSets(final Version version, final List&lt;Path&gt; tagManifests, final List&lt;Path&gt; payloadManifests, 
+      final Set&lt;BagitWarning&gt; warnings, final Charset encoding) 
+          throws IOException, MaliciousPathException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+  //edge case, for version 1.0+ all tag manifests SHOULD list the same set of files
+<span class="pc bpc" id="L285" title="3 of 4 branches missed.">    if(tagManifests.size() &gt; 1 &amp;&amp; VERSION_1_0.isSameOrOlder(version)){</span>
+<span class="nc" id="L286">      checkManifestsListSameSetOfFiles(warnings, tagManifests, encoding);</span>
+    }
+    
+    //edge case, for version 1.0+ all payload manifests SHOULD list the same set of files
+<span class="fc bfc" id="L290" title="All 4 branches covered.">    if(payloadManifests.size() &gt; 1 &amp;&amp; VERSION_1_0.isSameOrOlder(version)){</span>
+<span class="fc" id="L291">      checkManifestsListSameSetOfFiles(warnings, payloadManifests, encoding);</span>
+    }
+<span class="fc" id="L293">  }</span>
+  
+  //starting with version 1.0 all manifest types (tag, payload) should list the same set of files
+  @SuppressWarnings(&quot;PMD.EmptyCatchBlock&quot;)
+  static void checkManifestsListSameSetOfFiles(final Set&lt;BagitWarning&gt; warnings, final List&lt;Path&gt; manifestPaths, final Charset charset) throws IOException, MaliciousPathException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+<span class="fc" id="L298">    final StandardBagitAlgorithmNameToSupportedAlgorithmMapping nameMapping = new StandardBagitAlgorithmNameToSupportedAlgorithmMapping();</span>
+    
+<span class="fc" id="L300">    Manifest compareToManifest = null;</span>
+<span class="fc" id="L301">    Path compareToManifestPath = null;</span>
+<span class="fc bfc" id="L302" title="All 2 branches covered.">    for (final Path manifestPath : manifestPaths) {</span>
+      try {
+<span class="fc" id="L304">        final Manifest manifest = ManifestReader.readManifest(nameMapping, manifestPath, manifestPath.getParent(), charset);</span>
+<span class="fc bfc" id="L305" title="All 2 branches covered.">        if(compareToManifest == null) {</span>
+<span class="fc" id="L306">          compareToManifestPath = manifestPath;</span>
+<span class="fc" id="L307">          compareToManifest = manifest;</span>
+<span class="fc" id="L308">          continue;</span>
+        }
+        
+<span class="pc bpc" id="L311" title="1 of 2 branches missed.">        if(!compareToManifest.getFileToChecksumMap().keySet().equals(manifest.getFileToChecksumMap().keySet())) {</span>
+<span class="fc" id="L312">          logger.warn(messages.getString(&quot;manifest_fileset_differ&quot;), compareToManifestPath, manifestPath);</span>
+<span class="fc" id="L313">          warnings.add(BagitWarning.MANIFEST_SETS_DIFFER);</span>
+        }
+      }
+<span class="fc" id="L316">      catch(UnsupportedAlgorithmException e) {</span>
+        //ignore an unsupported algorithm as it is caught in checkAlgorthm()
+<span class="fc" id="L318">      }</span>
+<span class="fc" id="L319">    }</span>
+<span class="fc" id="L320">  }</span>
+
+  //for unit test only
+  static String getOsFilesRegex() {
+<span class="fc" id="L324">    return OS_FILES_REGEX;</span>
+  }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

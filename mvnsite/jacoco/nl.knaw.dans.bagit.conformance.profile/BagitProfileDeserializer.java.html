@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BagitProfileDeserializer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.conformance.profile</a> &gt; <span class="el_source">BagitProfileDeserializer.java</span></div><h1>BagitProfileDeserializer.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.conformance.profile;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.ResourceBundle;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+
+/**
+ * Deserialize bagit profile json to a {@link BagitProfile}
+ */
+public class BagitProfileDeserializer extends StdDeserializer&lt;BagitProfile&gt; {
+
+  private static final long serialVersionUID = 1L;
+<span class="fc" id="L42">  private static final Logger logger = LoggerFactory.getLogger(BagitProfileDeserializer.class);</span>
+<span class="fc" id="L43">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+
+  public BagitProfileDeserializer() {
+<span class="fc" id="L46">    this(null);</span>
+<span class="fc" id="L47">  }</span>
+
+  public BagitProfileDeserializer(final Class&lt;?&gt; vc) {
+<span class="fc" id="L50">    super(vc);</span>
+<span class="fc" id="L51">  }</span>
+
+  @Override
+  public BagitProfile deserialize(final JsonParser p, final DeserializationContext ctxt)
+          throws IOException, JsonProcessingException {
+<span class="fc" id="L56">    final BagitProfile profile = new BagitProfile();</span>
+<span class="fc" id="L57">    final JsonNode node = p.getCodec().readTree(p);</span>
+
+<span class="fc" id="L59">    parseBagitProfileInfo(node, profile);</span>
+
+<span class="fc" id="L61">    profile.setBagInfoRequirements(parseBagInfo(node));</span>
+
+<span class="fc" id="L63">    profile.getManifestTypesRequired().addAll(parseManifestTypesRequired(node));</span>
+
+<span class="fc" id="L65">    profile.setFetchFileAllowed(node.get(&quot;Allow-Fetch.txt&quot;).asBoolean());</span>
+<span class="fc" id="L66">    logger.debug(messages.getString(&quot;fetch_allowed&quot;), profile.isFetchFileAllowed());</span>
+
+<span class="fc" id="L68">    profile.setSerialization(Serialization.valueOf(node.get(&quot;Serialization&quot;).asText()));</span>
+<span class="fc" id="L69">    logger.debug(messages.getString(&quot;serialization_allowed&quot;), profile.getSerialization());</span>
+
+<span class="fc" id="L71">    profile.getAcceptableMIMESerializationTypes().addAll(parseAcceptableSerializationFormats(node));</span>
+
+<span class="fc" id="L73">    profile.getTagManifestTypesRequired().addAll(parseRequiredTagmanifestTypes(node));</span>
+
+<span class="fc" id="L75">    profile.getTagFilesRequired().addAll(parseRequiredTagFiles(node));</span>
+
+<span class="fc" id="L77">    profile.getAcceptableBagitVersions().addAll(parseAcceptableVersions(node));</span>
+
+<span class="fc" id="L79">    return profile;</span>
+  }
+
+  private static void parseBagitProfileInfo(final JsonNode node, final BagitProfile profile) {
+<span class="fc" id="L83">    logger.debug(messages.getString(&quot;parsing_bagit_profile_info_section&quot;));</span>
+    
+<span class="fc" id="L85">    final JsonNode bagitProfileInfoNode = node.get(&quot;BagIt-Profile-Info&quot;);</span>
+<span class="fc" id="L86">    parseMandatoryTagsOfBagitProfileInfo(bagitProfileInfoNode, profile);</span>
+<span class="fc" id="L87">    parseOptionalTagsOfBagitProfileInfo(bagitProfileInfoNode, profile);</span>
+<span class="fc" id="L88">  }</span>
+
+  /**
+   * Parse required tags due to specification defined at &lt;a href=&quot;https://github.com/bagit-profiles/bagit-profiles&quot;&gt;bagit profiles&lt;/a&gt;
+   * Note: If one of the tags is missing, a NullPointerException is thrown.
+   *
+   * @param bagitProfileInfoNode Root node of the bagit profile info section.
+   * @param profile Representation of bagit profile.
+   */
+  private static void parseMandatoryTagsOfBagitProfileInfo(final JsonNode bagitProfileInfoNode, final BagitProfile profile) {
+<span class="fc" id="L98">    logger.debug(messages.getString(&quot;parsing_mandatory_tags_of_bagit_profile_info_section&quot;));</span>
+    
+<span class="fc" id="L100">    final String profileIdentifier = bagitProfileInfoNode.get(&quot;BagIt-Profile-Identifier&quot;).asText();</span>
+<span class="fc" id="L101">    logger.debug(messages.getString(&quot;identifier&quot;), profileIdentifier);</span>
+<span class="fc" id="L102">    profile.setBagitProfileIdentifier(profileIdentifier);</span>
+
+<span class="fc" id="L104">    final String sourceOrg = bagitProfileInfoNode.get(&quot;Source-Organization&quot;).asText();</span>
+<span class="fc" id="L105">    logger.debug(messages.getString(&quot;source_organization&quot;), sourceOrg);</span>
+<span class="fc" id="L106">    profile.setSourceOrganization(sourceOrg);</span>
+
+<span class="fc" id="L108">    final String extDescript = bagitProfileInfoNode.get(&quot;External-Description&quot;).asText();</span>
+<span class="fc" id="L109">    logger.debug(messages.getString(&quot;external_description&quot;), extDescript);</span>
+<span class="fc" id="L110">    profile.setExternalDescription(extDescript);</span>
+
+<span class="fc" id="L112">    final String version = bagitProfileInfoNode.get(&quot;Version&quot;).asText();</span>
+<span class="fc" id="L113">    logger.debug(messages.getString(&quot;version&quot;), version);</span>
+<span class="fc" id="L114">    profile.setVersion(version);</span>
+<span class="fc" id="L115">  }</span>
+
+  /**
+   * Parse optional tags due to specification defined at &lt;a href=&quot;https://github.com/bagit-profiles/bagit-profiles&quot;&gt;bagit profiles&lt;/a&gt;
+   *
+   * @param bagitProfileInfoNode Root node of the bagit profile info section.
+   * @param profile Representation of bagit profile .
+   */
+  private static void parseOptionalTagsOfBagitProfileInfo(final JsonNode bagitProfileInfoNode, final BagitProfile profile) {
+<span class="fc" id="L124">    logger.debug(messages.getString(&quot;parsing_optional_tags_of_bagit_profile_info_section&quot;));</span>
+
+<span class="fc" id="L126">    final JsonNode contactNameNode = bagitProfileInfoNode.get(&quot;Contact-Name&quot;);</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">    if (contactNameNode != null) {</span>
+<span class="fc" id="L128">      final String contactName = contactNameNode.asText();</span>
+<span class="fc" id="L129">      logger.debug(messages.getString(&quot;contact_name&quot;), contactName);</span>
+<span class="fc" id="L130">      profile.setContactName(contactName);</span>
+    }
+
+<span class="fc" id="L133">    final JsonNode contactEmailNode = bagitProfileInfoNode.get(&quot;Contact-Email&quot;);</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">    if (contactEmailNode != null) {</span>
+<span class="fc" id="L135">      final String contactEmail = contactEmailNode.asText();</span>
+<span class="fc" id="L136">      logger.debug(messages.getString(&quot;contact_email&quot;), contactEmail);</span>
+<span class="fc" id="L137">      profile.setContactEmail(contactEmail);</span>
+    }
+
+<span class="fc" id="L140">    final JsonNode contactPhoneNode = bagitProfileInfoNode.get(&quot;Contact-Phone&quot;);</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">    if (contactPhoneNode != null) {</span>
+<span class="fc" id="L142">      final String contactPhone = contactPhoneNode.asText();</span>
+<span class="fc" id="L143">      logger.debug(messages.getString(&quot;contact_phone&quot;), contactPhone);</span>
+<span class="fc" id="L144">      profile.setContactPhone(contactPhone);</span>
+    }
+<span class="fc" id="L146">  }</span>
+
+  @SuppressWarnings(&quot;PMD.AvoidInstantiatingObjectsInLoops&quot;)
+  private static Map&lt;String, BagInfoRequirement&gt; parseBagInfo(final JsonNode rootNode) {
+<span class="fc" id="L150">    final JsonNode bagInfoNode = rootNode.get(&quot;Bag-Info&quot;);</span>
+<span class="fc" id="L151">    logger.debug(messages.getString(&quot;parsing_bag_info&quot;));</span>
+<span class="fc" id="L152">    final Map&lt;String, BagInfoRequirement&gt; bagInfo = new HashMap&lt;&gt;();</span>
+
+<span class="fc" id="L154">    final Iterator&lt;Entry&lt;String, JsonNode&gt;&gt; nodes = bagInfoNode.fields(); //stuck in java 6...</span>
+
+<span class="fc bfc" id="L156" title="All 2 branches covered.">    while (nodes.hasNext()) {</span>
+<span class="fc" id="L157">      final Entry&lt;String, JsonNode&gt; node = nodes.next();</span>
+
+<span class="fc" id="L159">      final BagInfoRequirement entry = new BagInfoRequirement();</span>
+      // due to specification required is false by default.
+<span class="fc" id="L161">      final JsonNode requiredNode = node.getValue().get(&quot;required&quot;);</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">      if (requiredNode != null) {</span>
+<span class="fc" id="L163">        entry.setRequired(requiredNode.asBoolean());</span>
+      }
+
+<span class="fc" id="L166">      final JsonNode valuesNode = node.getValue().get(&quot;values&quot;);</span>
+<span class="fc bfc" id="L167" title="All 2 branches covered.">      if (valuesNode != null) {</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">        for (final JsonNode value : valuesNode) {</span>
+<span class="fc" id="L169">          entry.getAcceptableValues().add(value.asText());</span>
+<span class="fc" id="L170">        }</span>
+      }
+
+<span class="fc" id="L173">      final JsonNode repeatableNode = node.getValue().get(&quot;repeatable&quot;);</span>
+<span class="pc bpc" id="L174" title="1 of 2 branches missed.">      if (repeatableNode != null) {</span>
+<span class="fc" id="L175">        entry.setRepeatable(repeatableNode.asBoolean());</span>
+      }
+
+<span class="fc" id="L178">      logger.debug(&quot;{}: {}&quot;, node.getKey(), entry);</span>
+<span class="fc" id="L179">      bagInfo.put(node.getKey(), entry);</span>
+<span class="fc" id="L180">    }</span>
+
+<span class="fc" id="L182">    return bagInfo;</span>
+  }
+
+  private static List&lt;String&gt; parseManifestTypesRequired(final JsonNode node) {
+<span class="fc" id="L186">    final JsonNode manifests = node.get(&quot;Manifests-Required&quot;);</span>
+
+<span class="fc" id="L188">    final List&lt;String&gt; manifestTypes = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L190" title="All 2 branches covered.">    for (final JsonNode manifestName : manifests) {</span>
+<span class="fc" id="L191">      manifestTypes.add(manifestName.asText());</span>
+<span class="fc" id="L192">    }</span>
+
+<span class="fc" id="L194">    logger.debug(messages.getString(&quot;required_manifest_types&quot;), manifestTypes);</span>
+
+<span class="fc" id="L196">    return manifestTypes;</span>
+  }
+
+  private static List&lt;String&gt; parseAcceptableSerializationFormats(final JsonNode node) {
+<span class="fc" id="L200">    final JsonNode serialiationFormats = node.get(&quot;Accept-Serialization&quot;);</span>
+<span class="fc" id="L201">    final List&lt;String&gt; serialTypes = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L203" title="All 2 branches covered.">    for (final JsonNode serialiationFormat : serialiationFormats) {</span>
+<span class="fc" id="L204">      serialTypes.add(serialiationFormat.asText());</span>
+<span class="fc" id="L205">    }</span>
+<span class="fc" id="L206">    logger.debug(messages.getString(&quot;acceptable_serialization_mime_types&quot;), serialTypes);</span>
+
+<span class="fc" id="L208">    return serialTypes;</span>
+  }
+
+  private static List&lt;String&gt; parseRequiredTagmanifestTypes(final JsonNode node) {
+<span class="fc" id="L212">    final JsonNode tagManifestsRequiredNodes = node.get(&quot;Tag-Manifests-Required&quot;);</span>
+<span class="fc" id="L213">    final List&lt;String&gt; requiredTagmanifestTypes = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">    if (tagManifestsRequiredNodes != null) {</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">      for (final JsonNode tagManifestsRequiredNode : tagManifestsRequiredNodes) {</span>
+<span class="fc" id="L216">        requiredTagmanifestTypes.add(tagManifestsRequiredNode.asText());</span>
+<span class="fc" id="L217">      }</span>
+    }
+<span class="fc" id="L219">    logger.debug(messages.getString(&quot;required_tagmanifest_types&quot;), requiredTagmanifestTypes);</span>
+
+<span class="fc" id="L221">    return requiredTagmanifestTypes;</span>
+  }
+
+  private static List&lt;String&gt; parseRequiredTagFiles(final JsonNode node) {
+<span class="fc" id="L225">    final JsonNode tagFilesRequiredNodes = node.get(&quot;Tag-Files-Required&quot;);</span>
+<span class="fc" id="L226">    final List&lt;String&gt; requiredTagFiles = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L228" title="All 2 branches covered.">    if (tagFilesRequiredNodes != null) {</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">      for (final JsonNode tagFilesRequiredNode : tagFilesRequiredNodes) {</span>
+<span class="fc" id="L230">        requiredTagFiles.add(tagFilesRequiredNode.asText());</span>
+<span class="fc" id="L231">      }</span>
+    }
+<span class="fc" id="L233">    logger.debug(messages.getString(&quot;tag_files_required&quot;), requiredTagFiles);</span>
+
+<span class="fc" id="L235">    return requiredTagFiles;</span>
+  }
+
+  private static List&lt;String&gt; parseAcceptableVersions(final JsonNode node) {
+<span class="fc" id="L239">    final JsonNode acceptableVersionsNodes = node.get(&quot;Accept-BagIt-Version&quot;);</span>
+<span class="fc" id="L240">    final List&lt;String&gt; acceptableVersions = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L242" title="All 2 branches covered.">    for (final JsonNode acceptableVersionsNode : acceptableVersionsNodes) {</span>
+<span class="fc" id="L243">      acceptableVersions.add(acceptableVersionsNode.asText());</span>
+<span class="fc" id="L244">    }</span>
+<span class="fc" id="L245">    logger.debug(messages.getString(&quot;acceptable_bagit_versions&quot;), acceptableVersions);</span>
+
+<span class="fc" id="L247">    return acceptableVersions;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

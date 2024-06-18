@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ManifestWriter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.writer</a> &gt; <span class="el_source">ManifestWriter.java</span></div><h1>ManifestWriter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.writer;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Map.Entry;
+import java.util.ResourceBundle;
+import java.util.Set;
+
+import nl.knaw.dans.bagit.domain.Manifest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.BufferedWriter;
+
+/**
+ * Responsible for writing out a {@link Manifest} to the filesystem
+ */
+public final class ManifestWriter{
+<span class="fc" id="L37">  private static final Logger logger = LoggerFactory.getLogger(PayloadWriter.class);</span>
+<span class="fc" id="L38">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+  private ManifestWriter(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Write the payload &lt;b&gt;manifest(s)&lt;/b&gt; to the output directory
+   * 
+   * @param manifests the payload{@link Manifest}s to write out
+   * @param outputDir the root of where the manifest is being written to
+   * @param bagitRootDir the path to the root of the bag
+   * @param charsetName the name of the encoding for the file
+   * 
+   * @throws IOException if there was a problem writing a file
+   */
+  public static void writePayloadManifests(final Set&lt;Manifest&gt; manifests, final Path outputDir, final Path bagitRootDir, final Charset charsetName) throws IOException{
+<span class="fc" id="L55">    logger.info(messages.getString(&quot;writing_payload_manifests&quot;));</span>
+<span class="fc" id="L56">    writeManifests(manifests, outputDir, bagitRootDir, &quot;manifest-&quot;, charsetName);</span>
+<span class="fc" id="L57">  }</span>
+  
+  /**
+   * Write the tag &lt;b&gt;manifest(s)&lt;/b&gt; to the output directory
+   * 
+   * @param tagManifests the tag{@link Manifest}s to write out
+   * @param outputDir the root of where the manifest is being written to
+   * @param bagitRootDir the path to the root of the bag
+   * @param charsetName the name of the encoding for the file
+   * 
+   * @throws IOException if there was a problem writing a file
+   */
+  public static void writeTagManifests(final Set&lt;Manifest&gt; tagManifests, final Path outputDir, final Path bagitRootDir, final Charset charsetName) throws IOException{
+<span class="fc" id="L70">    logger.info(messages.getString(&quot;writing_tag_manifests&quot;));</span>
+<span class="fc" id="L71">    writeManifests(tagManifests, outputDir, bagitRootDir, &quot;tagmanifest-&quot;, charsetName);</span>
+<span class="fc" id="L72">  }</span>
+  
+  /*
+   * Generic method to write manifests
+   */
+  private static void writeManifests(final Set&lt;Manifest&gt; manifests, final Path outputDir, final Path relativeTo, final String filenameBase, final Charset charsetName) throws IOException{
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    for(final Manifest manifest : manifests){</span>
+<span class="fc" id="L79">      final Path manifestPath = outputDir.resolve(filenameBase + manifest.getAlgorithm().getBagitName() + &quot;.txt&quot;);</span>
+<span class="fc" id="L80">      logger.debug(messages.getString(&quot;writing_manifest_to_path&quot;), manifestPath);</span>
+
+<span class="fc" id="L82">      Files.deleteIfExists(manifestPath);</span>
+<span class="fc" id="L83">      Files.createFile(manifestPath);</span>
+
+<span class="fc" id="L85">      try (BufferedWriter writer = Files.newBufferedWriter(manifestPath, charsetName,</span>
+            StandardOpenOption.APPEND, StandardOpenOption.CREATE)) {
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        for (final Entry&lt;Path, String&gt; entry : manifest.getFileToChecksumMap().entrySet()) {</span>
+          //there are 2 spaces between the checksum and the path so that the manifests are compatible with the md5sum tools available on most unix systems.
+          //This may cause problems on windows due to it being text mode, in which case either replace with a * or try verifying in binary mode with --binary
+<span class="fc" id="L90">          final String line = entry.getValue() + &quot;  &quot; + RelativePathWriter.formatRelativePathString(relativeTo, entry.getKey());</span>
+<span class="fc" id="L91">          logger.debug(messages.getString(&quot;writing_line_to_file&quot;), line, manifestPath);</span>
+<span class="fc" id="L92">          writer.append(line);</span>
+<span class="fc" id="L93">        }</span>
+      }
+<span class="fc" id="L95">    }</span>
+<span class="fc" id="L96">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

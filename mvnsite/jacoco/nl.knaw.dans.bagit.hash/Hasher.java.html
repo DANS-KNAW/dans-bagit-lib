@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Hasher.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.hash</a> &gt; <span class="el_source">Hasher.java</span></div><h1>Hasher.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.hash;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Formatter;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.ResourceBundle;
+import java.util.Map.Entry;
+
+import nl.knaw.dans.bagit.domain.Manifest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Convenience class for generating a HEX formatted string of the checksum hash. 
+ */
+public final class Hasher {
+<span class="fc" id="L42">  private static final Logger logger = LoggerFactory.getLogger(Hasher.class);</span>
+  private static final int _64_KB = 1024 * 64;
+  private static final int CHUNK_SIZE = _64_KB;
+<span class="fc" id="L45">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+  private Hasher(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Create a HEX formatted string checksum hash of the file
+   * 
+   * @param path the {@link Path} (file) to hash
+   * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+   * @return the hash as a hex formated string
+   * @throws IOException if there is a problem reading the file
+   */
+  public static String hash(final Path path, final MessageDigest messageDigest) throws IOException {
+<span class="fc" id="L60">    updateMessageDigests(path, Arrays.asList(messageDigest));</span>
+    
+<span class="fc" id="L62">    return formatMessageDigest(messageDigest);</span>
+  }
+  
+  /**
+   * Update the Manifests with the file's hash
+   * 
+   * @param path the {@link Path} (file) to hash
+   * @param manifestToMessageDigestMap the map between {@link Manifest} and {@link MessageDigest}
+   * @throws IOException if there is a problem reading the file
+   */
+  public static void hash(final Path path, final Map&lt;Manifest, MessageDigest&gt; manifestToMessageDigestMap) throws IOException {
+<span class="fc" id="L73">    updateMessageDigests(path, manifestToMessageDigestMap.values());</span>
+<span class="fc" id="L74">    addMessageDigestHashToManifest(path, manifestToMessageDigestMap);</span>
+<span class="fc" id="L75">  }</span>
+  
+  static void updateMessageDigests(final Path path, final Collection&lt;MessageDigest&gt; messageDigests) throws IOException{
+<span class="fc" id="L78">    try(final InputStream is = new BufferedInputStream(Files.newInputStream(path, StandardOpenOption.READ))){</span>
+<span class="fc" id="L79">      final byte[] buffer = new byte[CHUNK_SIZE];</span>
+<span class="fc" id="L80">      int read = is.read(buffer);</span>
+      
+<span class="fc bfc" id="L82" title="All 2 branches covered.">      while(read != -1) {</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        for(final MessageDigest messageDigest : messageDigests){</span>
+<span class="fc" id="L84">          messageDigest.update(buffer, 0, read);</span>
+<span class="fc" id="L85">        }</span>
+<span class="fc" id="L86">        read = is.read(buffer);</span>
+      }
+    }
+<span class="fc" id="L89">  }</span>
+  
+  private static void addMessageDigestHashToManifest(final Path path, final Map&lt;Manifest, MessageDigest&gt; manifestToMessageDigestMap){
+<span class="fc bfc" id="L92" title="All 2 branches covered.">    for(final Entry&lt;Manifest, MessageDigest&gt; entry : manifestToMessageDigestMap.entrySet()){</span>
+<span class="fc" id="L93">      final String hash = formatMessageDigest(entry.getValue());</span>
+<span class="fc" id="L94">      logger.debug(messages.getString(&quot;adding_checksum&quot;), path, hash);</span>
+<span class="fc" id="L95">      entry.getKey().getFileToChecksumMap().put(path, hash);</span>
+<span class="fc" id="L96">    }</span>
+<span class="fc" id="L97">  }</span>
+  
+  //Convert the byte to hex format
+  private static String formatMessageDigest(final MessageDigest messageDigest){
+<span class="fc" id="L101">    try(final Formatter formatter = new Formatter()){</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">      for (final byte b : messageDigest.digest()) {</span>
+<span class="fc" id="L103">        formatter.format(&quot;%02x&quot;, b);</span>
+      }
+      
+<span class="fc" id="L106">      return formatter.toString();</span>
+    }
+  }
+  
+  /**
+   * create a mapping between {@link Manifest} and {@link MessageDigest} for each each supplied {@link SupportedAlgorithm} 
+   * 
+   * @param algorithms the {@link SupportedAlgorithm} that you which to map to {@link MessageDigest} 
+   * @return mapping between {@link Manifest} and {@link MessageDigest}
+   * @throws NoSuchAlgorithmException if {@link MessageDigest} doesn't support the algorithm
+   */
+  @SuppressWarnings(&quot;PMD.AvoidInstantiatingObjectsInLoops&quot;)
+  public static Map&lt;Manifest, MessageDigest&gt; createManifestToMessageDigestMap(final Collection&lt;SupportedAlgorithm&gt; algorithms) throws NoSuchAlgorithmException{
+<span class="fc" id="L119">    final Map&lt;Manifest, MessageDigest&gt; map = new HashMap&lt;&gt;();</span>
+
+<span class="fc bfc" id="L121" title="All 2 branches covered.">    for(final SupportedAlgorithm algorithm : algorithms){</span>
+<span class="fc" id="L122">      final MessageDigest messageDigest = MessageDigest.getInstance(algorithm.getMessageDigestName());</span>
+<span class="fc" id="L123">      final Manifest manifest = new Manifest(algorithm);</span>
+<span class="fc" id="L124">      map.put(manifest, messageDigest);</span>
+<span class="fc" id="L125">    }</span>
+    
+<span class="fc" id="L127">    return map;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

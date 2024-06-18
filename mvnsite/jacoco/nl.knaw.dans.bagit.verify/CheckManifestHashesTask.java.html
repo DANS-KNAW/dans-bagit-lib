@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CheckManifestHashesTask.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.verify</a> &gt; <span class="el_source">CheckManifestHashesTask.java</span></div><h1>CheckManifestHashesTask.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.verify;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
+import java.util.Map.Entry;
+import java.util.ResourceBundle;
+import java.util.concurrent.CountDownLatch;
+
+import nl.knaw.dans.bagit.exceptions.CorruptChecksumException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import nl.knaw.dans.bagit.hash.Hasher;
+
+/**
+ * Checks a give file to make sure the given checksum hash matches the computed checksum hash.
+ * This is thread safe so you can call many at a time.
+ */
+@SuppressWarnings(&quot;PMD.DoNotUseThreads&quot;)
+public class CheckManifestHashesTask implements Runnable {
+<span class="fc" id="L40">  private static final Logger logger = LoggerFactory.getLogger(CheckManifestHashesTask.class);</span>
+<span class="fc" id="L41">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+  private transient final Entry&lt;Path, String&gt; entry;
+  private transient final CountDownLatch latch;
+  private transient final Collection&lt;Exception&gt; exceptions;
+  private transient final String algorithm;
+  
+<span class="fc" id="L48">  public CheckManifestHashesTask(final Entry&lt;Path, String&gt; entry, final String algorithm, final CountDownLatch latch, final Collection&lt;Exception&gt; exceptions) {</span>
+<span class="fc" id="L49">    this.entry = entry;</span>
+<span class="fc" id="L50">    this.algorithm = algorithm;</span>
+<span class="fc" id="L51">    this.latch = latch;</span>
+<span class="fc" id="L52">    this.exceptions = exceptions;</span>
+<span class="fc" id="L53">  }</span>
+
+  @Override
+  public void run() {
+    try {
+<span class="fc" id="L58">      final MessageDigest messageDigest = MessageDigest.getInstance(algorithm);</span>
+<span class="fc" id="L59">      checkManifestEntry(entry, messageDigest, algorithm);</span>
+<span class="fc" id="L60">    } catch (IOException | CorruptChecksumException | NoSuchAlgorithmException e) {</span>
+<span class="fc" id="L61">      exceptions.add(e);</span>
+<span class="fc" id="L62">    }</span>
+<span class="fc" id="L63">    latch.countDown();</span>
+<span class="fc" id="L64">  }</span>
+  
+  protected static void checkManifestEntry(final Entry&lt;Path, String&gt; entry, final MessageDigest messageDigest, final String algorithm) throws IOException, CorruptChecksumException{
+<span class="pc bpc" id="L67" title="1 of 2 branches missed.">    if(Files.exists(entry.getKey())){</span>
+<span class="fc" id="L68">      logger.debug(messages.getString(&quot;checking_checksums&quot;), entry.getKey(), entry.getValue());</span>
+<span class="fc" id="L69">      final String hash = Hasher.hash(entry.getKey(), messageDigest);</span>
+<span class="fc" id="L70">      logger.debug(&quot;computed hash [{}] for file [{}]&quot;, hash, entry.getKey());</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">      if(!hash.equals(entry.getValue())){</span>
+<span class="fc" id="L72">        throw new CorruptChecksumException(messages.getString(&quot;corrupt_checksum_error&quot;), entry.getKey(), algorithm, entry.getValue(), hash);</span>
+      }
+    }
+    //if the file doesn't exist it will be caught by checkAllFilesListedInManifestExist method
+<span class="fc" id="L76">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

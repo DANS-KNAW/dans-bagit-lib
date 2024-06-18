@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BagitTextFileReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.reader</a> &gt; <span class="el_source">BagitTextFileReader.java</span></div><h1>BagitTextFileReader.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.reader;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.ResourceBundle;
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.Arrays;
+
+import nl.knaw.dans.bagit.exceptions.InvalidBagitFileFormatException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
+
+import nl.knaw.dans.bagit.domain.Version;
+import nl.knaw.dans.bagit.exceptions.InvalidBagMetadataException;
+import nl.knaw.dans.bagit.exceptions.UnparsableVersionException;
+
+/**
+ * This class is responsible for reading and parsing bagit.txt files from the filesystem
+ */
+public final class BagitTextFileReader {
+<span class="fc" id="L41">  private static final Logger logger = LoggerFactory.getLogger(BagitTextFileReader.class);</span>
+<span class="fc" id="L42">  private static final byte[] BOM = new byte[]{(byte)0xEF, (byte)0xBB, (byte)0xBF};</span>
+<span class="fc" id="L43">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+<span class="fc" id="L44">  private static final Version VERSION_1_0 = new Version(1, 0);</span>
+  private static final String LINE1_REGEX = &quot;(BagIt-Version: )\\d*\\.\\d*&quot;;
+  private static final String LINE2_REGEX = &quot;(Tag-File-Character-Encoding: )\\S*&quot;;
+  
+  private BagitTextFileReader(){
+    //intentionally left empty
+  }
+
+  /**
+   * Read the bagit.txt file and return the version and encoding.
+   * 
+   * @param bagitFile the bagit.txt file
+   * @return the bag {@link Version} and {@link Charset} encoding of the tag files
+   * 
+   * @throws IOException if there is a problem reading a file. The file MUST be in UTF-8 encoding.
+   * @throws UnparsableVersionException if there is a problem parsing the bagit version number
+   * @throws InvalidBagMetadataException if the bagit.txt file does not conform to &quot;key: value&quot;
+   * @throws InvalidBagitFileFormatException if the bagit.txt file does not conform to the bagit spec
+   */
+  public static SimpleImmutableEntry&lt;Version, Charset&gt; readBagitTextFile(final Path bagitFile) throws IOException, UnparsableVersionException, InvalidBagMetadataException, InvalidBagitFileFormatException{
+<span class="fc" id="L64">    logger.debug(messages.getString(&quot;reading_version_and_encoding&quot;), bagitFile);</span>
+<span class="fc" id="L65">    throwErrorIfByteOrderMarkIsPresent(bagitFile);</span>
+<span class="fc" id="L66">    final List&lt;SimpleImmutableEntry&lt;String, String&gt;&gt; pairs = KeyValueReader.readKeyValuesFromFile(bagitFile, &quot;:&quot;, StandardCharsets.UTF_8);</span>
+    
+<span class="fc" id="L68">    String version = null;</span>
+<span class="fc" id="L69">    Charset encoding = null;</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    for(final SimpleImmutableEntry&lt;String, String&gt; pair : pairs){</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">      if(&quot;BagIt-Version&quot;.equals(pair.getKey())){</span>
+<span class="fc" id="L72">        version = pair.getValue();</span>
+<span class="fc" id="L73">        logger.debug(messages.getString(&quot;bagit_version&quot;), version);</span>
+      }
+<span class="fc bfc" id="L75" title="All 2 branches covered.">      if(&quot;Tag-File-Character-Encoding&quot;.equals(pair.getKey())){</span>
+<span class="fc" id="L76">        encoding = Charset.forName(pair.getValue());</span>
+<span class="fc" id="L77">        logger.debug(messages.getString(&quot;tag_file_encoding&quot;), encoding);</span>
+      }
+<span class="fc" id="L79">    }</span>
+    
+<span class="pc bpc" id="L81" title="2 of 4 branches missed.">    if(version == null || encoding == null){</span>
+<span class="nc" id="L82">      throw new InvalidBagitFileFormatException(messages.getString(&quot;invalid_bagit_text_file_error&quot;));</span>
+    }
+    
+<span class="fc" id="L85">    final Version parsedVersion = parseVersion(version);</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">    if(parsedVersion.isSameOrNewer(VERSION_1_0)){</span>
+<span class="fc" id="L87">      final List&lt;String&gt; lines = Files.readAllLines(bagitFile, StandardCharsets.UTF_8);</span>
+<span class="fc" id="L88">      throwErrorIfLinesDoNotMatchStrict(lines);</span>
+    }
+    
+<span class="fc" id="L91">    return new SimpleImmutableEntry&lt;&gt;(parsedVersion, encoding);</span>
+  }
+  
+  /*
+   * As per the specification, a BOM is not allowed in the bagit.txt file
+   */
+  private static void throwErrorIfByteOrderMarkIsPresent(final Path bagitFile) throws IOException, InvalidBagitFileFormatException{
+<span class="fc" id="L98">    final byte[] firstFewBytesInFile = Arrays.copyOfRange(Files.readAllBytes(bagitFile), 0, BOM.length);</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    if(Arrays.equals(BOM, firstFewBytesInFile)){</span>
+<span class="fc" id="L100">      final String formattedMessage = messages.getString(&quot;bom_present_error&quot;);</span>
+<span class="fc" id="L101">      throw new InvalidBagitFileFormatException(MessageFormatter.format(formattedMessage, bagitFile).getMessage());</span>
+    }
+<span class="fc" id="L103">  }</span>
+  
+  /*
+   * As per the specification, if version is 1.0+ it must only contain 2 lines of the form
+   * BagIt-Version: &lt;M.N&gt;
+   * Tag-File-Character-Encoding: &lt;ENCODING&gt;
+   */
+  static void throwErrorIfLinesDoNotMatchStrict(final List&lt;String&gt; lines) throws InvalidBagitFileFormatException{
+<span class="fc bfc" id="L111" title="All 2 branches covered.">    if(lines.size() &gt; 2){</span>
+<span class="fc" id="L112">      final List&lt;String&gt; offendingLines = lines.subList(2, lines.size()-1);</span>
+<span class="fc" id="L113">      throw new InvalidBagitFileFormatException(MessageFormatter</span>
+<span class="fc" id="L114">          .format(messages.getString(&quot;strict_only_two_lines_error&quot;), offendingLines).getMessage());</span>
+    }
+<span class="fc bfc" id="L116" title="All 2 branches covered.">    if(!lines.get(0).matches(LINE1_REGEX)){</span>
+<span class="fc" id="L117">      throw new InvalidBagitFileFormatException(MessageFormatter</span>
+<span class="fc" id="L118">          .format(messages.getString(&quot;strict_first_line_error&quot;), lines.get(0)).getMessage());</span>
+    }
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    if(!lines.get(1).matches(LINE2_REGEX)){</span>
+<span class="fc" id="L121">      throw new InvalidBagitFileFormatException(MessageFormatter</span>
+<span class="fc" id="L122">          .format(messages.getString(&quot;strict_second_line_error&quot;), lines.get(0)).getMessage());</span>
+    }
+<span class="fc" id="L124">  }</span>
+  
+  /*
+   * parses the version string into a {@link Version} object
+   */
+  public static Version parseVersion(final String version) throws UnparsableVersionException{
+<span class="fc bfc" id="L130" title="All 2 branches covered.">    if(!version.contains(&quot;.&quot;)){</span>
+<span class="fc" id="L131">      throw new UnparsableVersionException(messages.getString(&quot;unparsable_version_error&quot;), version);</span>
+    }
+    
+<span class="fc" id="L134">    final String[] parts = version.trim().split(&quot;\\.&quot;);</span>
+<span class="pc bpc" id="L135" title="2 of 6 branches missed.">    if(parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()){</span>
+<span class="fc" id="L136">      throw new UnparsableVersionException(messages.getString(&quot;unparsable_version_error&quot;), version);</span>
+    }
+    
+<span class="fc" id="L139">    final int major = Integer.parseInt(parts[0]);</span>
+<span class="fc" id="L140">    final int minor = Integer.parseInt(parts[1]);</span>
+    
+<span class="fc" id="L142">    return new Version(major, minor);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

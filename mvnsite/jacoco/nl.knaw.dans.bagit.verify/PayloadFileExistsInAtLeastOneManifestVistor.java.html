@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PayloadFileExistsInAtLeastOneManifestVistor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.verify</a> &gt; <span class="el_source">PayloadFileExistsInAtLeastOneManifestVistor.java</span></div><h1>PayloadFileExistsInAtLeastOneManifestVistor.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.verify;
+
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ResourceBundle;
+import java.util.Set;
+
+import nl.knaw.dans.bagit.exceptions.FileNotInManifestException;
+import org.slf4j.helpers.MessageFormatter;
+
+/**
+ * Implements {@link SimpleFileVisitor} to ensure that the encountered file is in one of the manifests.
+ */
+public class PayloadFileExistsInAtLeastOneManifestVistor extends AbstractPayloadFileExistsInManifestsVistor {
+<span class="fc" id="L34">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  private transient final Set&lt;Path&gt; filesListedInManifests;
+
+  public PayloadFileExistsInAtLeastOneManifestVistor(final Set&lt;Path&gt; filesListedInManifests, final boolean ignoreHiddenFiles) {
+<span class="fc" id="L38">    super(ignoreHiddenFiles);</span>
+<span class="fc" id="L39">    this.filesListedInManifests = filesListedInManifests;</span>
+<span class="fc" id="L40">  }</span>
+
+  @Override
+  public FileVisitResult visitFile(final Path path, final BasicFileAttributes attrs)throws IOException, FileNotInManifestException {
+<span class="fc bfc" id="L44" title="All 4 branches covered.">	if(Files.isHidden(path) &amp;&amp; ignoreHiddenFiles){</span>
+<span class="fc" id="L45">	  logger.debug(messages.getString(&quot;skipping_hidden_file&quot;), path);</span>
+  }
+	else {
+<span class="pc bpc" id="L48" title="1 of 4 branches missed.">	  if(Files.isRegularFile(path) &amp;&amp; !filesListedInManifests.contains(path.normalize())){</span>
+<span class="fc" id="L49">      final String formattedMessage = messages.getString(&quot;file_not_in_any_manifest_error&quot;);</span>
+<span class="fc" id="L50">      throw new FileNotInManifestException(MessageFormatter.format(formattedMessage, path).getMessage());</span>
+    }
+<span class="fc" id="L52">    logger.debug(messages.getString(&quot;file_in_at_least_one_manifest&quot;), path);</span>
+	}
+<span class="fc" id="L54">	return FileVisitResult.CONTINUE;</span>
+  }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

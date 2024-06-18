@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ManifestReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.reader</a> &gt; <span class="el_source">ManifestReader.java</span></div><h1>ManifestReader.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.reader;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.ResourceBundle;
+
+import nl.knaw.dans.bagit.exceptions.InvalidBagitFileFormatException;
+import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import nl.knaw.dans.bagit.domain.Bag;
+import nl.knaw.dans.bagit.domain.Manifest;
+import nl.knaw.dans.bagit.exceptions.MaliciousPathException;
+import nl.knaw.dans.bagit.hash.BagitAlgorithmNameToSupportedAlgorithmMapping;
+import nl.knaw.dans.bagit.hash.SupportedAlgorithm;
+import nl.knaw.dans.bagit.util.PathUtils;
+
+/**
+ * This class is responsible for reading and parsing manifest files on the filesystem
+ */
+public final class ManifestReader {
+<span class="fc" id="L45">  private static final Logger logger = LoggerFactory.getLogger(ManifestReader.class);</span>
+<span class="fc" id="L46">  private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+  
+  private ManifestReader(){
+    //intentionally left empty
+  }
+  
+  /**
+   * Finds and reads all manifest files in the rootDir and adds them to the given bag.
+   * 
+   * @param nameMapping a map between BagIt algorithm names and {@link MessageDigest} names
+   * @param rootDir the directory that contain the manifest(s)
+   * @param bag to update with the manifests
+   * 
+   * 
+   * @throws IOException if there is a problem reading a file
+   * @throws MaliciousPathException if there is path that is referenced in the manifest that is outside the bag root directory
+   * @throws UnsupportedAlgorithmException if the manifest uses a algorithm that isn't supported
+   * @throws InvalidBagitFileFormatException if the manifest is not formatted properly
+   */
+  static void readAllManifests(final BagitAlgorithmNameToSupportedAlgorithmMapping nameMapping, final Path rootDir, final Bag bag) throws IOException, MaliciousPathException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+<span class="fc" id="L66">    logger.info(messages.getString(&quot;attempting_read_manifests&quot;));</span>
+    
+<span class="fc" id="L68">    try(final DirectoryStream&lt;Path&gt; manifests = getAllManifestFiles(rootDir)){</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">      for (final Path path : manifests){</span>
+<span class="fc" id="L70">        final String filename = PathUtils.getFilename(path);</span>
+        
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        if(filename.startsWith(&quot;tagmanifest-&quot;)){</span>
+<span class="fc" id="L73">          logger.debug(messages.getString(&quot;found_tagmanifest&quot;), path);</span>
+<span class="fc" id="L74">          bag.getTagManifests().add(readManifest(nameMapping, path, bag.getRootDir(), bag.getFileEncoding()));</span>
+        }
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">        else if(filename.startsWith(&quot;manifest-&quot;)){</span>
+<span class="fc" id="L77">          logger.debug(messages.getString(&quot;found_payload_manifest&quot;), path);</span>
+<span class="fc" id="L78">          bag.getPayLoadManifests().add(readManifest(nameMapping, path, bag.getRootDir(), bag.getFileEncoding()));</span>
+        }
+<span class="fc" id="L80">      }</span>
+    }
+<span class="fc" id="L82">  }</span>
+  
+  /*
+   * Get a list of all the tag and payload manifests
+   */
+  private static DirectoryStream&lt;Path&gt; getAllManifestFiles(final Path rootDir) throws IOException{
+<span class="fc" id="L88">    final DirectoryStream.Filter&lt;Path&gt; filter = new DirectoryStream.Filter&lt;Path&gt;() {</span>
+      @Override
+      public boolean accept(final Path file) throws IOException {
+<span class="pc bpc" id="L91" title="2 of 4 branches missed.">        if(file == null || file.getFileName() == null){ return false;}</span>
+<span class="fc" id="L92">        final String filename = PathUtils.getFilename(file);</span>
+<span class="fc bfc" id="L93" title="All 4 branches covered.">        return filename.startsWith(&quot;tagmanifest-&quot;) || filename.startsWith(&quot;manifest-&quot;);</span>
+      }
+    };
+    
+<span class="fc" id="L97">    return Files.newDirectoryStream(rootDir, filter);</span>
+  }
+  
+  /**
+   * Reads a manifest file and converts it to a {@link Manifest} object.
+   * 
+   * @param nameMapping a map between BagIt algorithm names and {@link MessageDigest} names
+   * @param manifestFile a specific manifest file
+   * @param bagRootDir the root directory of the bag
+   * @param charset the encoding to use when reading the manifest file
+   * @return the converted manifest object from the file
+   * 
+   * @throws IOException if there is a problem reading a file
+   * @throws MaliciousPathException if there is path that is referenced in the manifest that is outside the bag root directory
+   * @throws UnsupportedAlgorithmException if the manifest uses a algorithm that isn't supported
+   * @throws InvalidBagitFileFormatException if the manifest is not formatted properly
+   */
+  public static Manifest readManifest(final BagitAlgorithmNameToSupportedAlgorithmMapping nameMapping, 
+      final Path manifestFile, final Path bagRootDir, final Charset charset) 
+          throws IOException, MaliciousPathException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+<span class="fc" id="L117">    logger.debug(messages.getString(&quot;reading_manifest&quot;), manifestFile);</span>
+<span class="fc" id="L118">    final String alg = PathUtils.getFilename(manifestFile).split(&quot;[-\\.]&quot;)[1];</span>
+<span class="fc" id="L119">    final SupportedAlgorithm algorithm = nameMapping.getSupportedAlgorithm(alg);</span>
+    
+<span class="fc" id="L121">    final Manifest manifest = new Manifest(algorithm);</span>
+    
+<span class="fc" id="L123">    final Map&lt;Path, String&gt; filetToChecksumMap = readChecksumFileMap(manifestFile, bagRootDir, charset);</span>
+<span class="fc" id="L124">    manifest.setFileToChecksumMap(filetToChecksumMap);</span>
+    
+<span class="fc" id="L126">    return manifest;</span>
+  }
+  
+  /*
+   * read the manifest file into a map of files and checksums
+   */
+  static Map&lt;Path, String&gt; readChecksumFileMap(final Path manifestFile, final Path bagRootDir, final Charset charset) throws IOException, MaliciousPathException, InvalidBagitFileFormatException{
+<span class="fc" id="L133">    final HashMap&lt;Path, String&gt; map = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L134">    try(final BufferedReader br = Files.newBufferedReader(manifestFile, charset)){</span>
+<span class="fc" id="L135">      String line = br.readLine();</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">      while(line != null){</span>
+<span class="fc" id="L137">        final String[] parts = line.split(&quot;\\s+&quot;, 2);</span>
+<span class="fc" id="L138">        final Path file = TagFileReader.createFileFromManifest(bagRootDir, parts[1]);</span>
+<span class="fc" id="L139">        logger.debug(&quot;Read checksum [{}] and file [{}] from manifest [{}]&quot;, parts[0], file, manifestFile);</span>
+<span class="fc" id="L140">        map.put(file, parts[0]);</span>
+<span class="fc" id="L141">        line = br.readLine();</span>
+<span class="fc" id="L142">      }</span>
+    }
+    
+<span class="fc" id="L145">    return map;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>
