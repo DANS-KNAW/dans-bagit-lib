@@ -38,6 +38,10 @@
         <tag>1.0.0-SNAPSHOT</tag>
     </scm>
 
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
