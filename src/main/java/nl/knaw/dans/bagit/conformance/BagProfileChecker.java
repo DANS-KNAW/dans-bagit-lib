@@ -172,11 +172,11 @@ public final class BagProfileChecker {
     for(final String requiredManifestType : requiredManifestTypes){
       if(!manifestTypesPresent.contains(requiredManifestType)){
         final StringBuilder sb = new StringBuilder();
-        if(isPayloadManifest){ sb.append("tag");
-          sb.append(MessageFormatter.format(messages.getString("required_tag_manifest_type_not_present"), requiredManifestType).getMessage());
+        if(isPayloadManifest){
+          sb.append(MessageFormatter.format(messages.getString("required_manifest_type_not_present"), requiredManifestType).getMessage());
         }
         else{
-          sb.append(MessageFormatter.format(messages.getString("required_manifest_type_not_present"), requiredManifestType).getMessage());
+          sb.append(MessageFormatter.format(messages.getString("required_tag_manifest_type_not_present"), requiredManifestType).getMessage());
         }
           
         throw new RequiredManifestNotPresentException(sb.toString());
