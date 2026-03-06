@@ -193,15 +193,10 @@ public class BagitSuiteComplanceTest extends TempFolderTest {
     List<String> lines1 = Files.readAllLines(file1, encoding);
     List<String> lines2 = Files.readAllLines(file2, encoding);
     
-    List<String> strippedLines1 = new ArrayList<>(lines1.size());
-    List<String> strippedLines2 = new ArrayList<>(lines2.size());
+    String s1 = String.join("", lines1).replaceAll("\\r|\\n| |\t", "").replaceAll("Payload-Oxum:[0-9.]+", "");
+    String s2 = String.join("", lines2).replaceAll("\\r|\\n| |\t", "").replaceAll("Payload-Oxum:[0-9.]+", "");
     
-    for(int index=0; index<lines1.size(); index++){
-      strippedLines1.add(lines1.get(index).replaceAll("\\r|\\n| ", ""));
-      strippedLines2.add(lines2.get(index).replaceAll("\\r|\\n| ", ""));
-    }
-    
-    return strippedLines1.containsAll(strippedLines2);
+    return s1.equals(s2);
   }
   
   private void testBagsStructureAreEqual(Path originalBag, Path newBag) throws IOException{

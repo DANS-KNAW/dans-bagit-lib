@@ -83,7 +83,8 @@ public final class KeyValueReader {
   
   private static void mergeIndentedLine(final String line, final List<SimpleImmutableEntry<String, String>> keyValues){
     final SimpleImmutableEntry<String, String> oldKeyValue = keyValues.remove(keyValues.size() -1);
-    final SimpleImmutableEntry<String, String> newKeyValue = new SimpleImmutableEntry<>(oldKeyValue.getKey(), oldKeyValue.getValue() + System.lineSeparator() +line);
+    final String newContent = line.substring(1);
+    final SimpleImmutableEntry<String, String> newKeyValue = new SimpleImmutableEntry<>(oldKeyValue.getKey(), oldKeyValue.getValue() + System.lineSeparator() + newContent);
     keyValues.add(newKeyValue);
     
     logger.debug(messages.getString("found_indented_line"), oldKeyValue.getKey());

@@ -44,7 +44,7 @@ public class MetadataReaderTest extends PrivateConstructorTest {
     expectedValues.add(new SimpleImmutableEntry<>("Contact-Phone", "+1 408-555-1212"));
     expectedValues.add(new SimpleImmutableEntry<>("Contact-Email", "ej@spengler.edu"));
     expectedValues.add(new SimpleImmutableEntry<>("External-Description", "Uncompressed greyscale TIFF images from the" + System.lineSeparator() + 
-        "         Yoshimuri papers collection."));
+        "        Yoshimuri papers collection."));
     expectedValues.add(new SimpleImmutableEntry<>("Bagging-Date", "2008-01-15"));
     expectedValues.add(new SimpleImmutableEntry<>("External-Identifier", "spengler_yoshimuri_001"));
     expectedValues.add(new SimpleImmutableEntry<>("Bag-Size", "260 GB"));
@@ -52,7 +52,7 @@ public class MetadataReaderTest extends PrivateConstructorTest {
     expectedValues.add(new SimpleImmutableEntry<>("Bag-Count", "1 of 15"));
     expectedValues.add(new SimpleImmutableEntry<>("Internal-Sender-Identifier", "/storage/images/yoshimuri"));
     expectedValues.add(new SimpleImmutableEntry<>("Internal-Sender-Description", "Uncompressed greyscale TIFFs created from" + System.lineSeparator() + 
-        "         microfilm."));
+        "        microfilm."));
     expectedValues.add(new SimpleImmutableEntry<>("Bag-Count", "1 of 15")); //test duplicate
     
     Path bagInfoFile = Paths.get(getClass().getClassLoader().getResource("baginfoFiles").toURI());

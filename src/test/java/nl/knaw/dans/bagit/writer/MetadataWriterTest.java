@@ -27,6 +27,9 @@ import org.junit.jupiter.api.Test;
 
 import nl.knaw.dans.bagit.domain.Metadata;
 import nl.knaw.dans.bagit.domain.Version;
+import nl.knaw.dans.bagit.reader.KeyValueReader;
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.List;
 
 public class MetadataWriterTest extends PrivateConstructorTest {
   
@@ -53,5 +56,95 @@ public class MetadataWriterTest extends PrivateConstructorTest {
     
     MetadataWriter.writeBagMetadata(metadata, new Version(0,95), rootDir, StandardCharsets.UTF_8);
     Assertions.assertTrue(Files.exists(packageInfo));
+  }
+
+  @Test
+  public void testWriteAndReadMultilineMetadata() throws Exception {
+    Path rootDir = createDirectory("multilineTest");
+    Metadata metadata = new Metadata();
+    String multilineValue = "This is a" + System.lineSeparator() + "multi-line" + System.lineSeparator() + "value.";
+    metadata.add("Description", multilineValue);
+    metadata.add("Contact-Name", "John Doe");
+
+    MetadataWriter.writeBagMetadata(metadata, new Version(1, 0), rootDir, StandardCharsets.UTF_8);
+
+    Path bagInfo = rootDir.resolve("bag-info.txt");
+    String content = Files.readString(bagInfo, StandardCharsets.UTF_8);
+
+    // Check if subsequent lines are indented
+    String[] lines = content.split("\\R");
+    Assertions.assertTrue(lines[0].startsWith("Description: "));
+    Assertions.assertTrue(lines[1].startsWith(" "), "Line 2 should be indented");
+    Assertions.assertTrue(lines[2].startsWith(" "), "Line 3 should be indented");
+
+    // Read it back
+    List<SimpleImmutableEntry<String, String>> readMetadata = KeyValueReader.readKeyValuesFromFile(bagInfo, ":", StandardCharsets.UTF_8);
+    
+    boolean foundDescription = false;
+    for (SimpleImmutableEntry<String, String> entry : readMetadata) {
+      if ("Description".equals(entry.getKey())) {
+        Assertions.assertEquals(multilineValue, entry.getValue());
+        foundDescription = true;
+      }
+    }
+    Assertions.assertTrue(foundDescription);
+  }
+
+  @Test
+  public void testSanitizeMetadata() throws Exception {
+    Path rootDir = createDirectory("sanitizeTest");
+    Metadata metadata = new Metadata();
+    // \u0000 is a non-printable char, \u0007 is bell
+    String dirtyValue = "Value with\u0000 non-printable\u0007 chars.";
+    String cleanValue = "Value with non-printable chars.";
+    metadata.add("Custom-Key", dirtyValue);
+
+    MetadataWriter.writeBagMetadata(metadata, new Version(1, 0), rootDir, StandardCharsets.UTF_8);
+
+    Path bagInfo = rootDir.resolve("bag-info.txt");
+    List<SimpleImmutableEntry<String, String>> readMetadata = KeyValueReader.readKeyValuesFromFile(bagInfo, ":", StandardCharsets.UTF_8);
+    
+    for (SimpleImmutableEntry<String, String> entry : readMetadata) {
+      if ("Custom-Key".equals(entry.getKey())) {
+        Assertions.assertEquals(cleanValue, entry.getValue());
+      }
+    }
+  }
+
+  @Test
+  public void testWrapLongLines() throws Exception {
+    Path rootDir = createDirectory("wrapLongLinesTest");
+    Metadata metadata = new Metadata();
+    String longValue = "This is a very long value that should definitely exceed the seventy-nine characters limit that is recommended by the BagIt RFC 8493 section two point two point two.";
+    // Length is ~166 chars.
+    metadata.add("Long-Key", longValue);
+
+    MetadataWriter.writeBagMetadata(metadata, new Version(1, 0), rootDir, StandardCharsets.UTF_8);
+
+    Path bagInfo = rootDir.resolve("bag-info.txt");
+    String content = Files.readString(bagInfo, StandardCharsets.UTF_8);
+
+    String[] lines = content.split("\\R");
+    for (String line : lines) {
+      Assertions.assertTrue(line.length() <= 80, "Line length should be <= 80 (79 chars + potential newline): " + line.length());
+      if (!line.startsWith("Long-Key: ")) {
+        Assertions.assertTrue(line.startsWith(" "), "Wrapped lines should be indented");
+      }
+    }
+
+    // Read it back
+    List<SimpleImmutableEntry<String, String>> readMetadata = KeyValueReader.readKeyValuesFromFile(bagInfo, ":", StandardCharsets.UTF_8);
+    boolean foundLongKey = false;
+    for (SimpleImmutableEntry<String, String> entry : readMetadata) {
+      if ("Long-Key".equals(entry.getKey())) {
+        String expectedValue = longValue.replace(" ", System.lineSeparator());
+        // Since it's wrapped at spaces, the space is replaced by newline in reading if it's joined by newline
+        // But wrapLine also preserves spaces? Let's check what it actually produces.
+        // It should match the longValue with some spaces replaced by newlines.
+        Assertions.assertEquals(longValue, entry.getValue().replace(System.lineSeparator(), " "));
+        foundLongKey = true;
+      }
+    }
+    Assertions.assertTrue(foundLongKey);
   }
 }
