@@ -145,7 +145,7 @@ public class BagitSuiteComplanceTest extends TempFolderTest {
     
     for(Path bagDir : visitor.getWarningTestCases()){
       warnings = BagLinter.lintBag(bagDir);
-      Assertions.assertTrue(warnings.size() > 0);
+        Assertions.assertFalse(warnings.isEmpty());
     }
   }
   
@@ -188,8 +188,8 @@ public class BagitSuiteComplanceTest extends TempFolderTest {
     
   }
   
-  //return true if the content is the same disregarding line endings
-  private final boolean compareFileContents(final Path file1, final Path file2, final Charset encoding) throws IOException {
+  //return true if the content is the same disregarding line endings and indentation
+  private boolean compareFileContents(final Path file1, final Path file2, final Charset encoding) throws IOException {
     List<String> lines1 = Files.readAllLines(file1, encoding);
     List<String> lines2 = Files.readAllLines(file2, encoding);
     
