@@ -147,4 +147,31 @@ public class MetadataWriterTest extends PrivateConstructorTest {
     }
     Assertions.assertTrue(foundLongKey);
   }
+
+  @Test
+  public void testMultilineAndWrapping() throws Exception {
+    Path rootDir = createDirectory("multilineAndWrappingTest");
+    Metadata metadata = new Metadata();
+    // A multiline value where the first line is short and the second is long
+    String value = "Short first line\nThis is a very long second line that will definitely need wrapping because it's much longer than seventy-nine characters.";
+    metadata.add("Description", value);
+
+    MetadataWriter.writeBagMetadata(metadata, new Version(1, 0), rootDir, java.nio.charset.StandardCharsets.UTF_8);
+
+    Path bagInfo = rootDir.resolve("bag-info.txt");
+    String content = Files.readString(bagInfo, java.nio.charset.StandardCharsets.UTF_8);
+
+    // Check for double newlines or lines containing only a space
+    String[] lines = content.split("\\r?\\n");
+    for (int i = 0; i < lines.length; i++) {
+      String line = lines[i];
+      Assertions.assertFalse(line.isEmpty() && i < lines.length - 1, "Should not have empty lines in the middle (caused by double newlines)");
+      if (i > 0) {
+        // All lines after the first one of an entry must be indented
+        Assertions.assertTrue(line.startsWith(" "), "Continuation line must start with a space: [" + line + "]");
+        // If it was a double newline, we'd see a line that is just " " followed by another line
+        Assertions.assertNotEquals(" ", line, "Should not have a line that is just a single space");
+      }
+    }
+  }
 }

@@ -93,7 +93,7 @@ public final class MetadataWriter {
       final int maxLength = i == 0 ? 79 - keyPrefixLength : 78; // Continuation lines have " " prefix
       // Check if it's already "well-wrapped" or short
       if (line.length() > maxLength) {
-        sb.append(wrapLine(line, i == 0, i > 0, keyPrefixLength));
+        sb.append(wrapLine(line, i == 0, keyPrefixLength));
       } else {
         sb.append(line);
       }
@@ -101,7 +101,7 @@ public final class MetadataWriter {
     return sb.toString();
   }
 
-  private static String wrapLine(final String line, final boolean isFirstLine, final boolean startsWithNewline, final int keyPrefixLength) {
+  private static String wrapLine(final String line, final boolean isFirstLine, final int keyPrefixLength) {
     final StringBuilder sb = new StringBuilder();
     int start = 0;
     boolean firstWrap = true;
@@ -122,7 +122,7 @@ public final class MetadataWriter {
       }
       
       String sub = line.substring(start, end);
-      if (start > 0 || (firstWrap && startsWithNewline)) {
+      if (start > 0) {
         sb.append(System.lineSeparator());
         sb.append(" ");
       }
