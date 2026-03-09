@@ -61,12 +61,80 @@ public final class MetadataWriter {
     final StringBuilder lines = new StringBuilder();
     
     for(final SimpleImmutableEntry<String, String> entry : metadata.getAll()){
-      final String line = entry.getKey() + ": " + entry.getValue() + System.lineSeparator();
-      lines.append(line);
+      final String key = entry.getKey();
+      String value = entry.getValue();
+      value = value.replaceAll("[^\\x09\\x20-\\x7E\\x0A\\x0D\\x80-\\uFFFF]", "");
+      lines.append(formatLine(key, value, version)).append(System.lineSeparator());
     }
     
     logger.debug(messages.getString("writing_line_to_file"), lines.toString(), bagInfoFilePath);
     Files.write(bagInfoFilePath, lines.toString().getBytes(charsetName), 
         StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+  }
+
+  private static String formatLine(final String key, final String value, final Version version) {
+    if (version.isSameOrOlder(VERSION_0_95)) {
+      final String fullLine = key + ": " + value;
+      return fullLine.replaceAll("(\\r\\n|\\r|\\n)", "$1 ");
+    }
+    
+    final StringBuilder sb = new StringBuilder();
+    final int keyPrefixLength = key.length() + 2; // "Key: "
+    sb.append(key).append(": ");
+    final String[] parts = value.split("(\\r\\n|\\r|\\n)", -1);
+    
+    for (int i = 0; i < parts.length; i++) {
+      String line = parts[i];
+      if (i > 0) {
+        sb.append(System.lineSeparator());
+        line = " " + line;
+      }
+      
+      final int maxLength = i == 0 ? 79 - keyPrefixLength : 78; // Continuation lines have " " prefix
+      // Check if it's already "well-wrapped" or short
+      if (line.length() > maxLength) {
+        sb.append(wrapLine(line, i == 0, keyPrefixLength));
+      } else {
+        sb.append(line);
+      }
+    }
+    return sb.toString();
+  }
+
+  private static String wrapLine(final String line, final boolean isFirstLine, final int keyPrefixLength) {
+    final StringBuilder sb = new StringBuilder();
+    int start = 0;
+    boolean firstWrap = true;
+    
+    while (start < line.length()) {
+      int maxLength = 78; // Indented line starts with " ", so 78 more chars = 79
+      if (firstWrap && isFirstLine) {
+        maxLength = 79 - keyPrefixLength;
+      }
+      
+      int end = Math.min(start + maxLength, line.length());
+      
+      if (end < line.length()) {
+        int lastSpace = line.lastIndexOf(' ', end);
+        if (lastSpace > start) {
+          end = lastSpace;
+        }
+      }
+      
+      String sub = line.substring(start, end);
+      if (start > 0) {
+        sb.append(System.lineSeparator());
+        sb.append(" ");
+      }
+      sb.append(sub);
+      
+      start = end;
+      while (start < line.length() && line.charAt(start) == ' ') {
+        start++;
+      }
+      firstWrap = false;
+    }
+    
+    return sb.toString();
   }
 }
