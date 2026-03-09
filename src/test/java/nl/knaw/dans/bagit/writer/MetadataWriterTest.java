@@ -31,6 +31,8 @@ import nl.knaw.dans.bagit.reader.KeyValueReader;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class MetadataWriterTest extends PrivateConstructorTest {
   
   @Test
@@ -52,10 +54,10 @@ public class MetadataWriterTest extends PrivateConstructorTest {
     Assertions.assertFalse(Files.exists(packageInfo));
     
     MetadataWriter.writeBagMetadata(metadata, new Version(0,96), rootDir, StandardCharsets.UTF_8);
-    Assertions.assertTrue(Files.exists(bagInfo));
+    assertTrue(Files.exists(bagInfo));
     
     MetadataWriter.writeBagMetadata(metadata, new Version(0,95), rootDir, StandardCharsets.UTF_8);
-    Assertions.assertTrue(Files.exists(packageInfo));
+    assertTrue(Files.exists(packageInfo));
   }
 
   @Test
@@ -73,9 +75,9 @@ public class MetadataWriterTest extends PrivateConstructorTest {
 
     // Check if subsequent lines are indented
     String[] lines = content.split("\\R");
-    Assertions.assertTrue(lines[0].startsWith("Description: "));
-    Assertions.assertTrue(lines[1].startsWith(" "), "Line 2 should be indented");
-    Assertions.assertTrue(lines[2].startsWith(" "), "Line 3 should be indented");
+    assertTrue(lines[0].startsWith("Description: "));
+    assertTrue(lines[1].startsWith(" "), "Line 2 should be indented");
+    assertTrue(lines[2].startsWith(" "), "Line 3 should be indented");
 
     // Read it back
     List<SimpleImmutableEntry<String, String>> readMetadata = KeyValueReader.readKeyValuesFromFile(bagInfo, ":", StandardCharsets.UTF_8);
@@ -87,7 +89,7 @@ public class MetadataWriterTest extends PrivateConstructorTest {
         foundDescription = true;
       }
     }
-    Assertions.assertTrue(foundDescription);
+    assertTrue(foundDescription);
   }
 
   @Test
@@ -103,12 +105,15 @@ public class MetadataWriterTest extends PrivateConstructorTest {
 
     Path bagInfo = rootDir.resolve("bag-info.txt");
     List<SimpleImmutableEntry<String, String>> readMetadata = KeyValueReader.readKeyValuesFromFile(bagInfo, ":", StandardCharsets.UTF_8);
-    
+
+    boolean found = false;
     for (SimpleImmutableEntry<String, String> entry : readMetadata) {
       if ("Custom-Key".equals(entry.getKey())) {
         Assertions.assertEquals(cleanValue, entry.getValue());
+        found = true;
       }
     }
+    assertTrue(found);
   }
 
   @Test
@@ -126,9 +131,9 @@ public class MetadataWriterTest extends PrivateConstructorTest {
 
     String[] lines = content.split("\\R");
     for (String line : lines) {
-      Assertions.assertTrue(line.length() <= 80, "Line length should be <= 80 (79 chars + potential newline): " + line.length());
+      assertTrue(line.length() <= 79, "Line length should be <= 79: " + line.length());
       if (!line.startsWith("Long-Key: ")) {
-        Assertions.assertTrue(line.startsWith(" "), "Wrapped lines should be indented");
+        assertTrue(line.startsWith(" "), "Wrapped lines should be indented");
       }
     }
 
@@ -137,7 +142,6 @@ public class MetadataWriterTest extends PrivateConstructorTest {
     boolean foundLongKey = false;
     for (SimpleImmutableEntry<String, String> entry : readMetadata) {
       if ("Long-Key".equals(entry.getKey())) {
-        String expectedValue = longValue.replace(" ", System.lineSeparator());
         // Since it's wrapped at spaces, the space is replaced by newline in reading if it's joined by newline
         // But wrapLine also preserves spaces? Let's check what it actually produces.
         // It should match the longValue with some spaces replaced by newlines.
@@ -145,7 +149,7 @@ public class MetadataWriterTest extends PrivateConstructorTest {
         foundLongKey = true;
       }
     }
-    Assertions.assertTrue(foundLongKey);
+    assertTrue(foundLongKey);
   }
 
   @Test
@@ -156,10 +160,10 @@ public class MetadataWriterTest extends PrivateConstructorTest {
     String value = "Short first line\nThis is a very long second line that will definitely need wrapping because it's much longer than seventy-nine characters.";
     metadata.add("Description", value);
 
-    MetadataWriter.writeBagMetadata(metadata, new Version(1, 0), rootDir, java.nio.charset.StandardCharsets.UTF_8);
+    MetadataWriter.writeBagMetadata(metadata, new Version(1, 0), rootDir, StandardCharsets.UTF_8);
 
     Path bagInfo = rootDir.resolve("bag-info.txt");
-    String content = Files.readString(bagInfo, java.nio.charset.StandardCharsets.UTF_8);
+    String content = Files.readString(bagInfo, StandardCharsets.UTF_8);
 
     // Check for double newlines or lines containing only a space
     String[] lines = content.split("\\r?\\n");
@@ -168,7 +172,7 @@ public class MetadataWriterTest extends PrivateConstructorTest {
       Assertions.assertFalse(line.isEmpty() && i < lines.length - 1, "Should not have empty lines in the middle (caused by double newlines)");
       if (i > 0) {
         // All lines after the first one of an entry must be indented
-        Assertions.assertTrue(line.startsWith(" "), "Continuation line must start with a space: [" + line + "]");
+        assertTrue(line.startsWith(" "), "Continuation line must start with a space: [" + line + "]");
         // If it was a double newline, we'd see a line that is just " " followed by another line
         Assertions.assertNotEquals(" ", line, "Should not have a line that is just a single space");
       }
