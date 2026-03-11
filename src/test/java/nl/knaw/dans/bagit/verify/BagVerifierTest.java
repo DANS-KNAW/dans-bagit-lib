@@ -16,6 +16,8 @@
 package nl.knaw.dans.bagit.verify;
 
 import java.io.File;
+import java.net.URL;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -33,6 +35,7 @@ import nl.knaw.dans.bagit.domain.Bag;
 import nl.knaw.dans.bagit.domain.Manifest;
 import nl.knaw.dans.bagit.exceptions.CorruptChecksumException;
 import nl.knaw.dans.bagit.exceptions.FileNotInManifestException;
+import nl.knaw.dans.bagit.exceptions.FileNotInPayloadDirectoryException;
 import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
 import nl.knaw.dans.bagit.exceptions.VerificationException;
 import nl.knaw.dans.bagit.hash.StandardSupportedAlgorithms;
@@ -235,5 +238,35 @@ public class BagVerifierTest extends TempFolderTest{
     Bag bag = reader.read(passingRootDir);
     
     BagVerifier.quicklyVerify(bag);
+  }
+
+  @Test
+  public void testHoleyBag() throws Exception {
+    Path bagDir = Paths.get("src", "test", "resources", "md5Bag");
+    Path copyDir = copyBagToTempFolder(bagDir);
+    Path readme = copyDir.resolve("data/readme.txt");
+    byte[] content = Files.readAllBytes(readme);
+    Files.delete(readme);
+
+    // Create a local file to serve as "remote" resource
+    Path remoteFile = copyDir.resolve("remote-readme.txt");
+    Files.write(remoteFile, content);
+    URL remoteUrl = remoteFile.toUri().toURL();
+
+    // Create fetch.txt
+    Path fetchFile = copyDir.resolve("fetch.txt");
+    // Format of fetch.txt: url length path
+    String fetchLine = remoteUrl.toString() + " " + content.length + " data/readme.txt\n";
+    Files.write(fetchFile, fetchLine.getBytes());
+
+    Bag bag = reader.read(copyDir);
+
+    // Should be invalid without isHoley=true because file is missing
+    Assertions.assertThrows(FileNotInPayloadDirectoryException.class, () -> {
+      sut.isValid(bag, true);
+    });
+
+    // Should be valid with isHoley=true
+    sut.isValid(bag, true, true);
   }
 }

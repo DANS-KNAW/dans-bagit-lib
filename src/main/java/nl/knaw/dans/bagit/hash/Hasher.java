@@ -18,6 +18,7 @@ package nl.knaw.dans.bagit.hash;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -59,6 +60,28 @@ public final class Hasher {
   public static String hash(final Path path, final MessageDigest messageDigest) throws IOException {
     updateMessageDigests(path, Arrays.asList(messageDigest));
     
+    return formatMessageDigest(messageDigest);
+  }
+
+  /**
+   * Create a HEX formatted string checksum hash of the data from the URL
+   *
+   * @param url the {@link URL} to hash
+   * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+   * @return the hash as a hex formatted string
+   * @throws IOException if there is a problem reading from the URL
+   */
+  public static String hash(final URL url, final MessageDigest messageDigest) throws IOException {
+    try (final InputStream is = new BufferedInputStream(url.openStream())) {
+      final byte[] buffer = new byte[CHUNK_SIZE];
+      int read = is.read(buffer);
+
+      while (read != -1) {
+        messageDigest.update(buffer, 0, read);
+        read = is.read(buffer);
+      }
+    }
+
     return formatMessageDigest(messageDigest);
   }
   
