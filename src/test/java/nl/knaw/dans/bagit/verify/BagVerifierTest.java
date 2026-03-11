@@ -256,17 +256,19 @@ public class BagVerifierTest extends TempFolderTest{
     // Create fetch.txt
     Path fetchFile = copyDir.resolve("fetch.txt");
     // Format of fetch.txt: url length path
+    // IMPORTANT: BagReader uses relative paths from root for fetch items, 
+    // but they should NOT have 'data/' prefix if they are in data directory? 
+    // Actually, BagIt spec says it's the path relative to the bag root.
     String fetchLine = remoteUrl.toString() + " " + content.length + " data/readme.txt\n";
     Files.write(fetchFile, fetchLine.getBytes());
 
     Bag bag = reader.read(copyDir);
 
-    // Should be invalid without isHoley=true because file is missing
-    Assertions.assertThrows(FileNotInPayloadDirectoryException.class, () -> {
-      sut.isValid(bag, true);
-    });
+    // With the new logic, it should be valid even without explicitly passing true,
+    // because fetch.txt is present and contains data/readme.txt
+    sut.isValid(bag, true);
 
-    // Should be valid with isHoley=true
+    // It should also be valid if we explicitly pass true
     sut.isValid(bag, true, true);
   }
 }

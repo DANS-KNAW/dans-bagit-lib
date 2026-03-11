@@ -154,12 +154,13 @@ public final class BagVerifier implements AutoCloseable{
     isValid(bag, ignoreHiddenFiles, false);
   }
 
-  public void isValid(final Bag bag, final boolean ignoreHiddenFiles, final boolean isHoley) throws IOException, FileNotInManifestException, MissingPayloadManifestException, MissingBagitFileException, MissingPayloadDirectoryException, FileNotInPayloadDirectoryException, InterruptedException, MaliciousPathException, CorruptChecksumException, VerificationException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+  public void isValid(final Bag bag, final boolean ignoreHiddenFiles, final boolean allowHoley) throws IOException, FileNotInManifestException, MissingPayloadManifestException, MissingBagitFileException, MissingPayloadDirectoryException, FileNotInPayloadDirectoryException, InterruptedException, MaliciousPathException, CorruptChecksumException, VerificationException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
     logger.info(messages.getString("checking_bag_is_valid"), bag.getRootDir());
-    isComplete(bag, ignoreHiddenFiles, isHoley);
+    final boolean holey = allowHoley || !bag.getItemsToFetch().isEmpty();
+    isComplete(bag, ignoreHiddenFiles, holey);
 
     final Map<Path, URL> fetchUrls = new HashMap<>();
-    if (isHoley) {
+    if (holey) {
       for (final FetchItem item : bag.getItemsToFetch()) {
         fetchUrls.put(item.path, item.url);
       }
@@ -167,7 +168,7 @@ public final class BagVerifier implements AutoCloseable{
 
     logger.debug(messages.getString("checking_payload_checksums"));
     for(final Manifest payloadManifest : bag.getPayLoadManifests()){
-      checkHashes(payloadManifest, fetchUrls, isHoley);
+      checkHashes(payloadManifest, fetchUrls, holey);
     }
 
     logger.debug(messages.getString("checking_tag_file_checksums"));
@@ -184,15 +185,14 @@ public final class BagVerifier implements AutoCloseable{
     checkHashes(manifest, null, false);
   }
 
-  @SuppressWarnings("PMD.AvoidInstantiatingObjectsInLoops")
-  void checkHashes(final Manifest manifest, final Map<Path, URL> fetchUrls, final boolean isHoley) throws CorruptChecksumException, InterruptedException, VerificationException{
+  void checkHashes(final Manifest manifest, final Map<Path, URL> fetchUrls, final boolean allowHoley) throws CorruptChecksumException, InterruptedException, VerificationException{
     final CountDownLatch latch = new CountDownLatch( manifest.getFileToChecksumMap().size());
 
     //TODO maybe return all of these at some point...
     final Collection<Exception> exceptions = Collections.synchronizedCollection(new ArrayList<>());
 
     for(final Entry<Path, String> entry : manifest.getFileToChecksumMap().entrySet()){
-      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchUrls, isHoley));
+      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchUrls, allowHoley));
     }
 
     latch.await();
@@ -238,12 +238,14 @@ public final class BagVerifier implements AutoCloseable{
     isComplete(bag, ignoreHiddenFiles, false);
   }
 
-  public void isComplete(final Bag bag, final boolean ignoreHiddenFiles, final boolean isHoley) throws
+  public void isComplete(final Bag bag, final boolean ignoreHiddenFiles, final boolean allowHoley) throws
     IOException, MissingPayloadManifestException, MissingBagitFileException, MissingPayloadDirectoryException,
     FileNotInPayloadDirectoryException, InterruptedException, MaliciousPathException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
     logger.info(messages.getString("checking_bag_is_complete"), bag.getRootDir());
 
-    if (!isHoley) {
+    final boolean holey = allowHoley || !bag.getItemsToFetch().isEmpty();
+
+    if (!holey) {
       MandatoryVerifier.checkFetchItemsExist(bag.getItemsToFetch(), bag.getRootDir());
     }
 
@@ -253,7 +255,7 @@ public final class BagVerifier implements AutoCloseable{
 
     MandatoryVerifier.checkIfAtLeastOnePayloadManifestsExist(bag.getRootDir(), bag.getVersion());
 
-    manifestVerifier.verifyManifests(bag, ignoreHiddenFiles, isHoley);
+    manifestVerifier.verifyManifests(bag, ignoreHiddenFiles, holey);
   }
   
   public ExecutorService getExecutor() {

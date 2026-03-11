@@ -17,7 +17,6 @@ package nl.knaw.dans.bagit.verify;
 
 import java.io.IOException;
 import java.net.URL;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -36,7 +35,6 @@ import nl.knaw.dans.bagit.exceptions.FileNotInPayloadDirectoryException;
 import nl.knaw.dans.bagit.exceptions.InvalidBagitFileFormatException;
 import nl.knaw.dans.bagit.exceptions.MaliciousPathException;
 import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
-import nl.knaw.dans.bagit.reader.ManifestReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.helpers.MessageFormatter;
@@ -135,7 +133,7 @@ public class ManifestVerifier implements AutoCloseable{
     verifyManifests(bag, ignoreHiddenFiles, false);
   }
 
-  public void verifyManifests(final Bag bag, final boolean ignoreHiddenFiles, final boolean isHoley)
+  public void verifyManifests(final Bag bag, final boolean ignoreHiddenFiles, final boolean allowHoley)
       throws IOException, MaliciousPathException, UnsupportedAlgorithmException,
       InvalidBagitFileFormatException, FileNotInPayloadDirectoryException, InterruptedException {
 
@@ -145,7 +143,7 @@ public class ManifestVerifier implements AutoCloseable{
     final Set<Path> payloadFiles = getFilesListedInPayloadManifests(bag);
     final Set<Path> tagFiles = getFilesListedInTagManifests(bag);
 
-    checkAllFilesListedInManifestExist(payloadFiles, isHoley, bag);
+    checkAllFilesListedInManifestExist(payloadFiles, allowHoley, bag);
     checkAllFilesListedInManifestExist(tagFiles, false, bag);
 
     final Set<Path> allFilesListedInManifests = new HashSet<>(payloadFiles);
@@ -200,12 +198,12 @@ public class ManifestVerifier implements AutoCloseable{
    * Make sure all the listed files actually exist
    */
   @SuppressWarnings("PMD.AvoidInstantiatingObjectsInLoops")
-  private void checkAllFilesListedInManifestExist(final Set<Path> files, final boolean isHoley, final Bag bag) throws FileNotInPayloadDirectoryException, InterruptedException {
+  private void checkAllFilesListedInManifestExist(final Set<Path> files, final boolean allowHoley, final Bag bag) throws FileNotInPayloadDirectoryException, InterruptedException {
     final CountDownLatch latch = new CountDownLatch(files.size());
     final Set<Path> missingFiles = new ConcurrentSkipListSet<>();
 
     final Map<Path, URL> fetchUrls = new HashMap<>();
-    if (isHoley) {
+    if (allowHoley) {
       for (final FetchItem item : bag.getItemsToFetch()) {
         fetchUrls.put(item.path, item.url);
       }
@@ -213,7 +211,7 @@ public class ManifestVerifier implements AutoCloseable{
 
     logger.info(messages.getString("check_all_files_in_manifests_exist"));
     for (final Path file : files) {
-      if (isHoley && fetchUrls.containsKey(file)) {
+      if (allowHoley && fetchUrls.containsKey(file)) {
         latch.countDown();
       } else {
         executor.execute(new CheckIfFileExistsTask(file, missingFiles, latch));

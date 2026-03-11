@@ -52,7 +52,7 @@ public interface TagFileReader {
       throw new InvalidBagitFileFormatException(MessageFormatter.format(formattedMessage, path).getMessage());
     }
     
-    if(path.contains("~/")){
+    if(path.contains("~/") || path.startsWith("~")){
       final String formattedMessage = messages.getString("malicious_path_error");
       throw new MaliciousPathException(MessageFormatter.format(formattedMessage, path).getMessage());
     }
