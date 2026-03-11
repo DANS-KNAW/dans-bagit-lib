@@ -185,14 +185,14 @@ public final class BagVerifier implements AutoCloseable{
     checkHashes(manifest, null, false);
   }
 
-  void checkHashes(final Manifest manifest, final Map<Path, URL> fetchUrls, final boolean allowHoley) throws CorruptChecksumException, InterruptedException, VerificationException{
+  void checkHashes(final Manifest manifest, final Map<Path, URL> fetchUrls, final boolean holey) throws CorruptChecksumException, InterruptedException, VerificationException{
     final CountDownLatch latch = new CountDownLatch( manifest.getFileToChecksumMap().size());
 
     //TODO maybe return all of these at some point...
     final Collection<Exception> exceptions = Collections.synchronizedCollection(new ArrayList<>());
 
     for(final Entry<Path, String> entry : manifest.getFileToChecksumMap().entrySet()){
-      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchUrls, allowHoley));
+      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchUrls, holey));
     }
 
     latch.await();

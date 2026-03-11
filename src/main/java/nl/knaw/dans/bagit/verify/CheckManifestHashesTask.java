@@ -47,26 +47,26 @@ public class CheckManifestHashesTask implements Runnable {
   private transient final Collection<Exception> exceptions;
   private transient final String algorithm;
   private transient final Map<Path, URL> fetchUrls;
-  private transient final boolean allowHoley;
+  private transient final boolean holey;
 
   public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions) {
     this(entry, algorithm, latch, exceptions, null, false);
   }
 
-  public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions, final Map<Path, URL> fetchUrls, final boolean allowHoley) {
+  public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions, final Map<Path, URL> fetchUrls, final boolean holey) {
     this.entry = entry;
     this.algorithm = algorithm;
     this.latch = latch;
     this.exceptions = exceptions;
     this.fetchUrls = fetchUrls;
-    this.allowHoley = allowHoley;
+    this.holey = holey;
   }
 
   @Override
   public void run() {
     try {
       final MessageDigest messageDigest = MessageDigest.getInstance(algorithm);
-      checkManifestEntry(entry, messageDigest, algorithm, fetchUrls, allowHoley);
+      checkManifestEntry(entry, messageDigest, algorithm, fetchUrls, holey);
     } catch (IOException | CorruptChecksumException | NoSuchAlgorithmException e) {
       exceptions.add(e);
     }

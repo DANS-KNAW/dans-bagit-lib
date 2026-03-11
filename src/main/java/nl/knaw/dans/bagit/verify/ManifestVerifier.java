@@ -133,7 +133,7 @@ public class ManifestVerifier implements AutoCloseable{
     verifyManifests(bag, ignoreHiddenFiles, false);
   }
 
-  public void verifyManifests(final Bag bag, final boolean ignoreHiddenFiles, final boolean allowHoley)
+  public void verifyManifests(final Bag bag, final boolean ignoreHiddenFiles, final boolean holey)
       throws IOException, MaliciousPathException, UnsupportedAlgorithmException,
       InvalidBagitFileFormatException, FileNotInPayloadDirectoryException, InterruptedException {
 
@@ -143,7 +143,7 @@ public class ManifestVerifier implements AutoCloseable{
     final Set<Path> payloadFiles = getFilesListedInPayloadManifests(bag);
     final Set<Path> tagFiles = getFilesListedInTagManifests(bag);
 
-    checkAllFilesListedInManifestExist(payloadFiles, allowHoley, bag);
+    checkAllFilesListedInManifestExist(payloadFiles, holey, bag);
     checkAllFilesListedInManifestExist(tagFiles, false, bag);
 
     final Set<Path> allFilesListedInManifests = new HashSet<>(payloadFiles);
@@ -152,7 +152,7 @@ public class ManifestVerifier implements AutoCloseable{
     if (bag.getVersion().isOlder(new Version(1, 0))) {
       checkAllFilesInPayloadDirAreListedInAtLeastOneAManifest(allFilesListedInManifests, PathUtils.getDataDir(bag), ignoreHiddenFiles);
     } else {
-      CheckAllFilesInPayloadDirAreListedInAllManifests(bag.getPayLoadManifests(), PathUtils.getDataDir(bag), ignoreHiddenFiles);
+      checkAllFilesInPayloadDirAreListedInAllManifests(bag.getPayLoadManifests(), PathUtils.getDataDir(bag), ignoreHiddenFiles);
     }
   }
 
@@ -198,12 +198,12 @@ public class ManifestVerifier implements AutoCloseable{
    * Make sure all the listed files actually exist
    */
   @SuppressWarnings("PMD.AvoidInstantiatingObjectsInLoops")
-  private void checkAllFilesListedInManifestExist(final Set<Path> files, final boolean allowHoley, final Bag bag) throws FileNotInPayloadDirectoryException, InterruptedException {
+  private void checkAllFilesListedInManifestExist(final Set<Path> files, final boolean holey, final Bag bag) throws FileNotInPayloadDirectoryException, InterruptedException {
     final CountDownLatch latch = new CountDownLatch(files.size());
     final Set<Path> missingFiles = new ConcurrentSkipListSet<>();
 
     final Map<Path, URL> fetchUrls = new HashMap<>();
-    if (allowHoley) {
+    if (holey) {
       for (final FetchItem item : bag.getItemsToFetch()) {
         fetchUrls.put(item.path, item.url);
       }
@@ -211,7 +211,8 @@ public class ManifestVerifier implements AutoCloseable{
 
     logger.info(messages.getString("check_all_files_in_manifests_exist"));
     for (final Path file : files) {
-      if (allowHoley && fetchUrls.containsKey(file)) {
+      if (holey && fetchUrls.containsKey(file)) {
+        // Not actually checking that the file can be downloaded. That will be done when calculating the checksums later on.
         latch.countDown();
       } else {
         executor.execute(new CheckIfFileExistsTask(file, missingFiles, latch));
@@ -249,7 +250,7 @@ public class ManifestVerifier implements AutoCloseable{
   /*
    * as per the bagit-spec 1.0+ all files have to be listed in all manifests
    */
-  private static void CheckAllFilesInPayloadDirAreListedInAllManifests(final Set<Manifest> payLoadManifests,
+  private static void checkAllFilesInPayloadDirAreListedInAllManifests(final Set<Manifest> payLoadManifests,
       final Path payloadDir, final boolean ignoreHiddenFiles) throws IOException {
     logger.debug(messages.getString("checking_file_in_all_manifests"), payloadDir);
     if (Files.exists(payloadDir)) {
