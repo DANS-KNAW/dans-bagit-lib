@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -83,12 +84,10 @@ public final class Hasher {
   public static String hash(final URL url, final MessageDigest messageDigest) throws IOException {
     long totalSize = -1;
     boolean rangeSupported = false;
-    java.net.URLConnection connection = url.openConnection();
+    URLConnection connection = url.openConnection();
 
-    if (connection instanceof HttpURLConnection) {
-      HttpURLConnection httpConnection = (HttpURLConnection) connection;
+    if (connection instanceof HttpURLConnection httpConnection) {
       httpConnection.setRequestMethod("HEAD");
-      int responseCode = httpConnection.getResponseCode();
 
       totalSize = httpConnection.getContentLengthLong();
       String acceptRanges = httpConnection.getHeaderField("Accept-Ranges");

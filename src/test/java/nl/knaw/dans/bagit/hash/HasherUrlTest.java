@@ -208,6 +208,44 @@ public class HasherUrlTest {
     }
 
     @Test
+    public void testHashWithFailedHeadRequest() throws IOException, NoSuchAlgorithmException {
+        server.removeContext("/test");
+        server.createContext("/test", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws IOException {
+                requestCount.incrementAndGet();
+                if ("HEAD".equals(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(405, -1);
+                } else {
+                    exchange.getResponseHeaders().set("Content-Length", String.valueOf(TEST_DATA_BYTES.length));
+                    exchange.sendResponseHeaders(200, TEST_DATA_BYTES.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(TEST_DATA_BYTES);
+                    }
+                }
+            }
+        });
+
+        URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/test");
+        MessageDigest md = MessageDigest.getInstance("SHA-1");
+
+        String hash = Hasher.hash(url, md);
+
+        MessageDigest expectedMd = MessageDigest.getInstance("SHA-1");
+        expectedMd.update(TEST_DATA_BYTES);
+        byte[] digest = expectedMd.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : digest) {
+            sb.append(String.format("%02x", b));
+        }
+        String expectedHash = sb.toString();
+
+        Assertions.assertEquals(expectedHash, hash);
+        // Expect 2 requests: 1 HEAD (failed) and 1 GET (fallback)
+        Assertions.assertEquals(2, requestCount.get());
+    }
+
+    @Test
     public void testHashWithFileUrl() throws IOException, NoSuchAlgorithmException {
         java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("hasher-file-url-test", ".txt");
         try {
