@@ -82,12 +82,37 @@ public final class Hasher {
    * @throws IOException if there is a problem reading from the URL
    */
   public static String hash(final URL url, final MessageDigest messageDigest) throws IOException {
+    return hash(url, messageDigest, null);
+  }
+
+  /**
+   * Create a HEX formatted string checksum hash of the data from the URL
+   *
+   * @param url the {@link URL} to hash
+   * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+   * @param extraHeaders optional extra headers to send with the request
+   * @return the hash as a hex formatted string
+   * @throws IOException if there is a problem reading from the URL
+   */
+  public static String hash(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders) throws IOException {
     long totalSize = -1;
     boolean rangeSupported = false;
     URLConnection connection = url.openConnection();
 
     if (connection instanceof HttpURLConnection httpConnection) {
       httpConnection.setRequestMethod("HEAD");
+      httpConnection.setInstanceFollowRedirects(true);
+      if (extraHeaders != null) {
+        for (Entry<String, String> entry : extraHeaders.entrySet()) {
+          httpConnection.setRequestProperty(entry.getKey(), entry.getValue());
+        }
+      }
+
+      int responseCode = httpConnection.getResponseCode();
+      if (responseCode >= 300 && responseCode < 400) {
+        String newUrl = httpConnection.getHeaderField("Location");
+        return hash(new URL(newUrl), messageDigest, extraHeaders);
+      }
 
       totalSize = httpConnection.getContentLengthLong();
       String acceptRanges = httpConnection.getHeaderField("Accept-Ranges");
@@ -96,10 +121,19 @@ public final class Hasher {
 
     if (rangeSupported && totalSize > 0) {
       logger.info("Range requests supported for {}, downloading in chunks", url);
-      hashWithRangeRequests(url, messageDigest, totalSize);
+      hashWithRangeRequests(url, messageDigest, totalSize, extraHeaders);
     } else {
       logger.info("Range requests NOT supported or size unknown for {}, downloading full stream", url);
-      try (final InputStream is = new BufferedInputStream(url.openStream())) {
+      URLConnection conn = url.openConnection();
+      if (conn instanceof HttpURLConnection httpConn) {
+        httpConn.setInstanceFollowRedirects(true);
+        if (extraHeaders != null) {
+          for (Entry<String, String> entry : extraHeaders.entrySet()) {
+            httpConn.setRequestProperty(entry.getKey(), entry.getValue());
+          }
+        }
+      }
+      try (final InputStream is = new BufferedInputStream(conn.getInputStream())) {
         final byte[] buffer = new byte[CHUNK_SIZE];
         int read = is.read(buffer);
 
@@ -113,7 +147,7 @@ public final class Hasher {
     return formatMessageDigest(messageDigest);
   }
 
-  private static void hashWithRangeRequests(final URL url, final MessageDigest messageDigest, final long totalSize) throws IOException {
+  private static void hashWithRangeRequests(final URL url, final MessageDigest messageDigest, final long totalSize, final Map<String, String> extraHeaders) throws IOException {
     long chunkSize = Long.getLong(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE);
     int maxRetries = Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES);
     int retrySleepMs = Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS);
@@ -122,7 +156,7 @@ public final class Hasher {
     while (offset < totalSize) {
       long end = Math.min(offset + chunkSize - 1, totalSize - 1);
       String range = "bytes=" + offset + "-" + end;
-      int bytesRead = executeWithRetries(url, range, messageDigest, maxRetries, retrySleepMs);
+      int bytesRead = executeWithRetries(url, range, messageDigest, maxRetries, retrySleepMs, extraHeaders);
       if (bytesRead < 0) {
         throw new IOException("Failed to fetch range " + range + " after " + maxRetries + " attempts");
       }
@@ -133,10 +167,10 @@ public final class Hasher {
   /**
    * Executes the ranged request with retry logic. Returns the number of bytes read, or -1 if all retries failed.
    */
-  private static int executeWithRetries(URL url, String range, MessageDigest messageDigest, int maxRetries, int retrySleepMs) throws IOException {
+  private static int executeWithRetries(URL url, String range, MessageDigest messageDigest, int maxRetries, int retrySleepMs, final Map<String, String> extraHeaders) throws IOException {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        HttpURLConnection conn = openRangedConnection(url, range);
+        HttpURLConnection conn = openRangedConnection(url, range, extraHeaders);
         int code = conn.getResponseCode();
         if (code != 206 && code != 200) {
           throw new IOException("Unexpected response code " + code + " for range " + range);
@@ -164,8 +198,14 @@ public final class Hasher {
   /**
    * Opens a HttpURLConnection for the given range.
    */
-  private static HttpURLConnection openRangedConnection(URL url, String range) throws IOException {
+  private static HttpURLConnection openRangedConnection(URL url, String range, final Map<String, String> extraHeaders) throws IOException {
     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+    conn.setInstanceFollowRedirects(true);
+    if (extraHeaders != null) {
+      for (Entry<String, String> entry : extraHeaders.entrySet()) {
+        conn.setRequestProperty(entry.getKey(), entry.getValue());
+      }
+    }
     conn.setRequestProperty("Range", range);
     return conn;
   }
