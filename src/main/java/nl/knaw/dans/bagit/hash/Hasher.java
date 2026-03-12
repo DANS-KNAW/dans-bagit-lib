@@ -122,47 +122,67 @@ public final class Hasher {
     while (offset < totalSize) {
       long end = Math.min(offset + chunkSize - 1, totalSize - 1);
       String range = "bytes=" + offset + "-" + end;
-      
-      boolean success = false;
-      for (int attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-          HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-          conn.setRequestProperty("Range", range);
-          int code = conn.getResponseCode();
-          
-          if (code != 206 && code != 200) {
-             throw new IOException("Unexpected response code " + code + " for range " + range);
-          }
-          
-          try (InputStream is = conn.getInputStream()) {
-            byte[] buffer = new byte[CHUNK_SIZE];
-            int read = is.read(buffer);
-            while (read != -1) {
-              messageDigest.update(buffer, 0, read);
-              offset += read;
-              read = is.read(buffer);
-            }
-          }
-          success = true;
-          break;
-        } catch (IOException e) {
-          logger.warn("Error fetching range {} (attempt {}/{}): {}", range, attempt + 1, maxRetries, e.getMessage());
-          if (attempt < maxRetries - 1) {
-            try {
-              Thread.sleep(retrySleepMs);
-            } catch (InterruptedException ie) {
-              Thread.currentThread().interrupt();
-              throw new IOException("Interrupted during retry sleep", ie);
-            }
-          } else {
-            throw e;
-          }
-        }
-      }
-      if (!success) {
+      int bytesRead = executeWithRetries(url, range, messageDigest, maxRetries, retrySleepMs);
+      if (bytesRead < 0) {
         throw new IOException("Failed to fetch range " + range + " after " + maxRetries + " attempts");
       }
+      offset += (end - offset + 1); // Move to next chunk
     }
+  }
+
+  /**
+   * Executes the ranged request with retry logic. Returns the number of bytes read, or -1 if all retries failed.
+   */
+  private static int executeWithRetries(URL url, String range, MessageDigest messageDigest, int maxRetries, int retrySleepMs) throws IOException {
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        HttpURLConnection conn = openRangedConnection(url, range);
+        int code = conn.getResponseCode();
+        if (code != 206 && code != 200) {
+          throw new IOException("Unexpected response code " + code + " for range " + range);
+        }
+        try (InputStream is = conn.getInputStream()) {
+          return updateDigestFromStream(is, messageDigest);
+        }
+      } catch (IOException e) {
+        logger.warn("Error fetching range {} (attempt {}/{}): {}", range, attempt + 1, maxRetries, e.getMessage());
+        if (attempt < maxRetries - 1) {
+          try {
+            Thread.sleep(retrySleepMs);
+          } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted during retry sleep", ie);
+          }
+        } else {
+          throw e;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Opens a HttpURLConnection for the given range.
+   */
+  private static HttpURLConnection openRangedConnection(URL url, String range) throws IOException {
+    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+    conn.setRequestProperty("Range", range);
+    return conn;
+  }
+
+  /**
+   * Reads from the InputStream and updates the MessageDigest. Returns the number of bytes read.
+   */
+  private static int updateDigestFromStream(InputStream is, MessageDigest messageDigest) throws IOException {
+    byte[] buffer = new byte[CHUNK_SIZE];
+    int totalRead = 0;
+    int read = is.read(buffer);
+    while (read != -1) {
+      messageDigest.update(buffer, 0, read);
+      totalRead += read;
+      read = is.read(buffer);
+    }
+    return totalRead;
   }
   
   /**
