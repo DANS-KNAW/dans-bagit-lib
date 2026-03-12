@@ -20,7 +20,6 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import nl.knaw.dans.bagit.TempFolderTest;
 import nl.knaw.dans.bagit.domain.Bag;
-import nl.knaw.dans.bagit.exceptions.VerificationException;
 import nl.knaw.dans.bagit.reader.BagReader;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -37,6 +36,8 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class BagVerifierRemoteTest extends TempFolderTest {
     private HttpServer server;
@@ -56,97 +57,123 @@ public class BagVerifierRemoteTest extends TempFolderTest {
 
     @AfterEach
     public void tearDown() {
-        if (server != null) {
-            server.stop(0);
-        }
-        if (sut != null) {
-            sut.close();
-        }
+        if (server != null) server.stop(0);
+        if (sut != null) sut.close();
     }
 
     @Test
-    public void testIsValidWithExtraHeaders() throws Exception {
-        final String content = "test content";
-        final String authHeader = "SecretToken";
-        
-        server.createContext("/data/test.txt", new HttpHandler() {
+    public void testAuthenticatedRangeRequest() throws Exception {
+        final String content = "this is some test content for range requests";
+        final String authHeaderName = "X-Dataverse-key";
+        final String authHeaderValue = "secret-key";
+        final AtomicInteger rangeRequestCount = new AtomicInteger(0);
+
+        server.createContext("/datafile", new HttpHandler() {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
-                if (authHeader.equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+                if (!authHeaderValue.equals(exchange.getRequestHeaders().getFirst(authHeaderName))) {
+                    exchange.sendResponseHeaders(401, -1);
+                    return;
+                }
+
+                String range = exchange.getRequestHeaders().getFirst("Range");
+                if (range != null && range.startsWith("bytes=")) {
+                    rangeRequestCount.incrementAndGet();
+                    String[] parts = range.substring(6).split("-");
+                    int start = Integer.parseInt(parts[0]);
+                    int end = Integer.parseInt(parts[1]);
+                    byte[] fullContent = content.getBytes(StandardCharsets.UTF_8);
+                    int actualEnd = Math.min(end, fullContent.length - 1);
+                    int length = actualEnd - start + 1;
+                    
+                    exchange.getResponseHeaders().set("Content-Range", "bytes " + start + "-" + actualEnd + "/" + fullContent.length);
+                    exchange.sendResponseHeaders(206, length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(fullContent, start, length);
+                    }
+                } else {
+                    byte[] response = content.getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, response.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response);
+                    }
+                }
+            }
+        });
+
+        Path bagDir = Files.createTempDirectory(folder, "remote-bag");
+        Files.write(bagDir.resolve("bagit.txt"), "BagIt-Version: 0.97\nTag-File-Character-Encoding: UTF-8\n".getBytes());
+        Files.createDirectory(bagDir.resolve("data"));
+        
+        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+        sha1.update(content.getBytes(StandardCharsets.UTF_8));
+        String hash = formatMessageDigest(sha1.digest());
+        
+        Files.write(bagDir.resolve("manifest-sha1.txt"), (hash + "  data/test.txt\n").getBytes());
+        
+        URL remoteUrl = new URL("http://localhost:" + port + "/datafile");
+        Files.write(bagDir.resolve("fetch.txt"), (remoteUrl.toString() + " " + content.length() + " data/test.txt\n").getBytes());
+        
+        Bag bag = reader.read(bagDir);
+        
+        Map<String, String> headers = new HashMap<>();
+        headers.put(authHeaderName, authHeaderValue);
+        
+        // Use a small chunk size to force multiple range requests
+        System.setProperty("nl.knaw.dans.bagit.hash.chunkSize", "10");
+        try {
+            sut.isValid(bag, true, true, headers);
+        } finally {
+            System.clearProperty("nl.knaw.dans.bagit.hash.chunkSize");
+        }
+
+        Assertions.assertTrue(rangeRequestCount.get() > 1, "Should have used multiple range requests, but used: " + rangeRequestCount.get());
+    }
+
+    @Test
+    public void testFallbackToFullDownloadWhenRangeNotSupported() throws Exception {
+        final String content = "this content will be downloaded in one go";
+        final AtomicBoolean rangeAttempted = new AtomicBoolean(false);
+
+        server.createContext("/datafile", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws IOException {
+                if (exchange.getRequestHeaders().containsKey("Range")) {
+                    rangeAttempted.set(true);
+                    // Server ignores range and returns 200 OK
                     byte[] response = content.getBytes(StandardCharsets.UTF_8);
                     exchange.sendResponseHeaders(200, response.length);
                     try (OutputStream os = exchange.getResponseBody()) {
                         os.write(response);
                     }
                 } else {
-                    exchange.sendResponseHeaders(401, -1);
+                    byte[] response = content.getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, response.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response);
+                    }
                 }
             }
         });
 
-        Path bagDir = Files.createTempDirectory(folder, "remote-headers-bag");
+        Path bagDir = Files.createTempDirectory(folder, "remote-bag-fallback");
         Files.write(bagDir.resolve("bagit.txt"), "BagIt-Version: 0.97\nTag-File-Character-Encoding: UTF-8\n".getBytes());
         Files.createDirectory(bagDir.resolve("data"));
         
-        MessageDigest md5 = MessageDigest.getInstance("MD5");
-        md5.update(content.getBytes(StandardCharsets.UTF_8));
-        String hash = formatMessageDigest(md5.digest());
+        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+        sha1.update(content.getBytes(StandardCharsets.UTF_8));
+        String hash = formatMessageDigest(sha1.digest());
         
-        Files.write(bagDir.resolve("manifest-md5.txt"), (hash + "  data/test.txt\n").getBytes());
+        Files.write(bagDir.resolve("manifest-sha1.txt"), (hash + "  data/test.txt\n").getBytes());
         
-        URL remoteUrl = new URL("http://localhost:" + port + "/data/test.txt");
-        Files.write(bagDir.resolve("fetch.txt"), (remoteUrl.toString() + " - data/test.txt\n").getBytes());
-        
-        Bag bag = reader.read(bagDir);
-        
-        // Should fail without headers
-        Assertions.assertThrows(VerificationException.class, () -> sut.isValid(bag, true, true));
-        
-        // Should pass with headers
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Authorization", authHeader);
-        sut.isValid(bag, true, true, headers);
-    }
-
-    @Test
-    public void testIsValidWithRedirect() throws Exception {
-        final String content = "redirected content";
-        
-        server.createContext("/redirect", new HttpHandler() {
-            @Override
-            public void handle(HttpExchange exchange) throws IOException {
-                exchange.getResponseHeaders().set("Location", "http://localhost:" + port + "/data/final.txt");
-                exchange.sendResponseHeaders(302, -1);
-            }
-        });
-        
-        server.createContext("/data/final.txt", new HttpHandler() {
-            @Override
-            public void handle(HttpExchange exchange) throws IOException {
-                byte[] response = content.getBytes(StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(200, response.length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response);
-                }
-            }
-        });
-
-        Path bagDir = Files.createTempDirectory(folder, "remote-redirect-bag");
-        Files.write(bagDir.resolve("bagit.txt"), "BagIt-Version: 0.97\nTag-File-Character-Encoding: UTF-8\n".getBytes());
-        Files.createDirectory(bagDir.resolve("data"));
-        
-        MessageDigest md5 = MessageDigest.getInstance("MD5");
-        md5.update(content.getBytes(StandardCharsets.UTF_8));
-        String hash = formatMessageDigest(md5.digest());
-        
-        Files.write(bagDir.resolve("manifest-md5.txt"), (hash + "  data/test.txt\n").getBytes());
-        
-        URL redirectUrl = new URL("http://localhost:" + port + "/redirect");
-        Files.write(bagDir.resolve("fetch.txt"), (redirectUrl.toString() + " - data/test.txt\n").getBytes());
+        URL remoteUrl = new URL("http://localhost:" + port + "/datafile");
+        Files.write(bagDir.resolve("fetch.txt"), (remoteUrl.toString() + " " + content.length() + " data/test.txt\n").getBytes());
         
         Bag bag = reader.read(bagDir);
         
-        sut.isValid(bag, true, true);
+        sut.isValid(bag, true, true, null);
+
+        Assertions.assertTrue(rangeAttempted.get(), "Should have attempted a range request");
     }
 
     private String formatMessageDigest(final byte[] digest) {

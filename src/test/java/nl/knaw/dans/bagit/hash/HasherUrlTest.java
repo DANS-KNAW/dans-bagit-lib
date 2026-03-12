@@ -203,18 +203,19 @@ public class HasherUrlTest {
         String expectedHash = sb.toString();
         
         Assertions.assertEquals(expectedHash, hash);
-        // Only 2 requests: 1 HEAD and 1 for full content (openStream)
-        Assertions.assertEquals(2, requestCount.get());
+        // Only 1 request: the first range request which returns 200 OK and is treated as the full stream
+        Assertions.assertEquals(1, requestCount.get());
     }
 
     @Test
-    public void testHashWithFailedHeadRequest() throws IOException, NoSuchAlgorithmException {
+    public void testHashWithFailedFirstRangeRequest() throws IOException, NoSuchAlgorithmException {
         server.removeContext("/test");
         server.createContext("/test", new HttpHandler() {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
                 requestCount.incrementAndGet();
-                if ("HEAD".equals(exchange.getRequestMethod())) {
+                if (exchange.getRequestHeaders().containsKey("Range")) {
+                    // Fail range request after 5 attempts (to trigger fallback)
                     exchange.sendResponseHeaders(405, -1);
                 } else {
                     exchange.getResponseHeaders().set("Content-Length", String.valueOf(TEST_DATA_BYTES.length));
@@ -226,23 +227,28 @@ public class HasherUrlTest {
             }
         });
 
-        URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/test");
-        MessageDigest md = MessageDigest.getInstance("SHA-1");
+        System.setProperty("nl.knaw.dans.bagit.hash.maxRetries", "1");
+        try {
+            URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/test");
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
 
-        String hash = Hasher.hash(url, md);
+            String hash = Hasher.hash(url, md);
 
-        MessageDigest expectedMd = MessageDigest.getInstance("SHA-1");
-        expectedMd.update(TEST_DATA_BYTES);
-        byte[] digest = expectedMd.digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : digest) {
-            sb.append(String.format("%02x", b));
+            MessageDigest expectedMd = MessageDigest.getInstance("SHA-1");
+            expectedMd.update(TEST_DATA_BYTES);
+            byte[] digest = expectedMd.digest();
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            String expectedHash = sb.toString();
+
+            Assertions.assertEquals(expectedHash, hash);
+            // Expect 2 requests: 1 range request (failed) and 1 GET (fallback to full stream)
+            Assertions.assertEquals(2, requestCount.get());
+        } finally {
+            System.clearProperty("nl.knaw.dans.bagit.hash.maxRetries");
         }
-        String expectedHash = sb.toString();
-
-        Assertions.assertEquals(expectedHash, hash);
-        // Expect 2 requests: 1 HEAD (failed) and 1 GET (fallback)
-        Assertions.assertEquals(2, requestCount.get());
     }
 
     @Test

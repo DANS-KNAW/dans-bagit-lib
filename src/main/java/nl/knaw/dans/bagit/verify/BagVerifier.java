@@ -163,16 +163,16 @@ public final class BagVerifier implements AutoCloseable{
     final boolean holey = allowHoley || !bag.getItemsToFetch().isEmpty();
     isComplete(bag, ignoreHiddenFiles, holey);
 
-    final Map<Path, URL> fetchUrls = new HashMap<>();
+    final Map<Path, FetchItem> fetchItems = new HashMap<>();
     if (holey) {
       for (final FetchItem item : bag.getItemsToFetch()) {
-        fetchUrls.put(item.path, item.url);
+        fetchItems.put(item.path, item);
       }
     }
 
     logger.debug(messages.getString("checking_payload_checksums"));
     for(final Manifest payloadManifest : bag.getPayLoadManifests()){
-      checkHashes(payloadManifest, fetchUrls, holey, extraHeaders);
+      checkHashes(payloadManifest, fetchItems, holey, extraHeaders);
     }
 
     logger.debug(messages.getString("checking_tag_file_checksums"));
@@ -189,18 +189,18 @@ public final class BagVerifier implements AutoCloseable{
     checkHashes(manifest, null, false);
   }
 
-  void checkHashes(final Manifest manifest, final Map<Path, URL> fetchUrls, final boolean holey) throws CorruptChecksumException, InterruptedException, VerificationException{
-    checkHashes(manifest, fetchUrls, holey, null);
+  void checkHashes(final Manifest manifest, final Map<Path, FetchItem> fetchItems, final boolean holey) throws CorruptChecksumException, InterruptedException, VerificationException{
+    checkHashes(manifest, fetchItems, holey, null);
   }
 
-  void checkHashes(final Manifest manifest, final Map<Path, URL> fetchUrls, final boolean holey, final Map<String, String> extraHeaders) throws CorruptChecksumException, InterruptedException, VerificationException{
+  void checkHashes(final Manifest manifest, final Map<Path, FetchItem> fetchItems, final boolean holey, final Map<String, String> extraHeaders) throws CorruptChecksumException, InterruptedException, VerificationException{
     final CountDownLatch latch = new CountDownLatch( manifest.getFileToChecksumMap().size());
 
     //TODO maybe return all of these at some point...
     final Collection<Exception> exceptions = Collections.synchronizedCollection(new ArrayList<>());
 
     for(final Entry<Path, String> entry : manifest.getFileToChecksumMap().entrySet()){
-      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchUrls, holey, extraHeaders));
+      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders));
     }
 
     latch.await();
