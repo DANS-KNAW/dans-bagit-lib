@@ -18,6 +18,7 @@ package nl.knaw.dans.bagit.hash;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,6 +45,14 @@ public final class Hasher {
   private static final int _64_KB = 1024 * 64;
   private static final int CHUNK_SIZE = _64_KB;
   private static final ResourceBundle messages = ResourceBundle.getBundle("MessageBundle");
+
+  private static final String CHUNK_SIZE_PROP = "nl.knaw.dans.bagit.hash.chunkSize";
+  private static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
+  private static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
+
+  private static final long DEFAULT_CHUNK_SIZE = 1024L * 1024L; // 1 MiB
+  private static final int DEFAULT_MAX_RETRIES = 5;
+  private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
   
   private Hasher(){
     //intentionally left empty
@@ -72,17 +81,89 @@ public final class Hasher {
    * @throws IOException if there is a problem reading from the URL
    */
   public static String hash(final URL url, final MessageDigest messageDigest) throws IOException {
-    try (final InputStream is = new BufferedInputStream(url.openStream())) {
-      final byte[] buffer = new byte[CHUNK_SIZE];
-      int read = is.read(buffer);
+    long totalSize = -1;
+    boolean rangeSupported = false;
+    java.net.URLConnection connection = url.openConnection();
 
-      while (read != -1) {
-        messageDigest.update(buffer, 0, read);
-        read = is.read(buffer);
+    if (connection instanceof HttpURLConnection) {
+      HttpURLConnection httpConnection = (HttpURLConnection) connection;
+      httpConnection.setRequestMethod("HEAD");
+      int responseCode = httpConnection.getResponseCode();
+
+      totalSize = httpConnection.getContentLengthLong();
+      String acceptRanges = httpConnection.getHeaderField("Accept-Ranges");
+      rangeSupported = "bytes".equalsIgnoreCase(acceptRanges);
+    }
+
+    if (rangeSupported && totalSize > 0) {
+      logger.info("Range requests supported for {}, downloading in chunks", url);
+      hashWithRangeRequests(url, messageDigest, totalSize);
+    } else {
+      logger.info("Range requests NOT supported or size unknown for {}, downloading full stream", url);
+      try (final InputStream is = new BufferedInputStream(url.openStream())) {
+        final byte[] buffer = new byte[CHUNK_SIZE];
+        int read = is.read(buffer);
+
+        while (read != -1) {
+          messageDigest.update(buffer, 0, read);
+          read = is.read(buffer);
+        }
       }
     }
 
     return formatMessageDigest(messageDigest);
+  }
+
+  private static void hashWithRangeRequests(final URL url, final MessageDigest messageDigest, final long totalSize) throws IOException {
+    long chunkSize = Long.getLong(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE);
+    int maxRetries = Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES);
+    int retrySleepMs = Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS);
+
+    long offset = 0;
+    while (offset < totalSize) {
+      long end = Math.min(offset + chunkSize - 1, totalSize - 1);
+      String range = "bytes=" + offset + "-" + end;
+      
+      boolean success = false;
+      for (int attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+          conn.setRequestProperty("Range", range);
+          int code = conn.getResponseCode();
+          
+          if (code != 206 && code != 200) {
+             throw new IOException("Unexpected response code " + code + " for range " + range);
+          }
+          
+          try (InputStream is = conn.getInputStream()) {
+            byte[] buffer = new byte[CHUNK_SIZE];
+            int read = is.read(buffer);
+            while (read != -1) {
+              messageDigest.update(buffer, 0, read);
+              offset += read;
+              read = is.read(buffer);
+            }
+          }
+          success = true;
+          break;
+        } catch (IOException e) {
+          logger.warn("Error fetching range {} (attempt {}/{}): {}", range, attempt + 1, maxRetries, e.getMessage());
+          if (attempt < maxRetries - 1) {
+            try {
+              Thread.sleep(retrySleepMs);
+            } catch (InterruptedException ie) {
+              Thread.currentThread().interrupt();
+              throw new IOException("Interrupted during retry sleep", ie);
+            }
+          } else {
+            throw e;
+          }
+        }
+      }
+      if (!success) {
+        throw new IOException("Failed to fetch range " + range + " after " + maxRetries + " attempts");
+      }
+    }
   }
   
   /**
