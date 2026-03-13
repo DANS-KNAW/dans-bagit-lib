@@ -251,7 +251,7 @@ public final class BagVerifier implements AutoCloseable{
     FileNotInPayloadDirectoryException, InterruptedException, MaliciousPathException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
     logger.info(messages.getString("checking_bag_is_complete"), bag.getRootDir());
 
-    final boolean holey = allowHoley || !bag.getItemsToFetch().isEmpty();
+    final boolean holey = allowHoley && !bag.getItemsToFetch().isEmpty();
 
     if (!holey) {
       MandatoryVerifier.checkFetchItemsExist(bag.getItemsToFetch(), bag.getRootDir());
