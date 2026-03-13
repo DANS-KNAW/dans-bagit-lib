@@ -80,7 +80,6 @@ public class BagVerifierRedirectTest extends TempFolderTest {
         server1.createContext("/api/access/datafile/1", new HttpHandler() {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
-                System.out.println("[DEBUG_LOG] Server 1 received request with headers: " + exchange.getRequestHeaders().entrySet());
                 if (authHeaderValue.equals(exchange.getRequestHeaders().getFirst(authHeaderName))) {
                     exchange.getResponseHeaders().set("Location", "http://localhost:" + port2 + "/storage/file1?token=xyz");
                     exchange.sendResponseHeaders(302, -1);
@@ -94,7 +93,6 @@ public class BagVerifierRedirectTest extends TempFolderTest {
         server2.createContext("/storage/file1", new HttpHandler() {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
-                System.out.println("[DEBUG_LOG] Server 2 received request with headers: " + exchange.getRequestHeaders().entrySet());
                 if (exchange.getRequestHeaders().containsKey(authHeaderName)) {
                     headersSentToServer2.set(true);
                     // Simulate 403 Forbidden because S3 rejects requests with unknown/extra auth headers

@@ -168,6 +168,7 @@ public final class Hasher {
             }
             catch (IOException e) {
                 logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
+                messageDigest.reset();
                 return hashFullStream(currentUrl, messageDigest, currentHeaders);
             }
         }
