@@ -134,22 +134,6 @@
                 <version>3.9.0</version>
             </plugin>
 
-            <!-- publish code coverage reports to coveralls.io -->
-            <plugin>
-                <groupId>org.eluder.coveralls</groupId>
-                <artifactId>coveralls-maven-plugin</artifactId>
-                <version>4.3.0</version>
-                <dependencies>
-                    <!-- Source: https://mvnrepository.com/artifact/jakarta.xml.bind/jakarta.xml.bind-api -->
-                    <dependency>
-                        <groupId>jakarta.xml.bind</groupId>
-                        <artifactId>jakarta.xml.bind-api</artifactId>
-                        <version>4.1.0-M1</version>
-                        <scope>compile</scope>
-                    </dependency>
-                </dependencies>
-            </plugin>
-
             <!-- generate jacoco files -->
             <plugin>
                 <groupId>org.jacoco</groupId>
