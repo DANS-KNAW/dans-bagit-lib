@@ -1,9 +1,8 @@
-MANUAL
-======
+Description
+===========
+
 Library with classes and functions for working with the BagIt format
 
-DESCRIPTION
------------
 BagIt is a set of hierarchical file layout conventions designed to
 support storage and transfer of arbitrary digital content. A "bag"
 consists of a directory containing the payload files and other
@@ -22,28 +21,34 @@ See: <https://datatracker.ietf.org/doc/html/rfc8493>{:target=_blank}.
 This library was first developed by the [LibraryOfCongress](https://github.com/LibraryOfCongress/bagit-java/){:target=_blank:} and
 forked by DANS-KNAW.
 
-INSTALLATION
-------------
+Using the library
+-----------------
 
-To use this library in a Maven-based project:
+To use this library in a Maven-based project, add the following to your `pom.xml`.
 
-1. Include in your `pom.xml` a declaration for the DANS maven repository:
+### 1. Declare the DANS maven repository
 
-        <repositories>
-            <!-- possibly other repository declarations here ... -->
-            <repository>
-                <id>DANS</id>
-                <releases>
-                    <enabled>true</enabled>
-                </releases>
-                <url>https://maven.dans.knaw.nl/releases/</url>
-            </repository>
-        </repositories>
+```xml
 
-2. Include a dependency on this library.
+<repositories>
+    <!-- possibly other repository declarations here ... -->
+    <repository>
+        <id>DANS</id>
+        <releases>
+            <enabled>true</enabled>
+        </releases>
+        <url>https://maven.dans.knaw.nl/releases/</url>
+    </repository>
+</repositories>
+```
 
-        <dependency>
-            <groupId>nl.knaw.dans</groupId>
-            <artifactId>dans-bagit-lib</artifactId>
-            <version>{version}</version> <!-- <=== FILL LIBRARY VERSION TO USE HERE -->
-        </dependency>
+### 2. Include a dependency on this library
+
+```xml
+
+<dependency>
+    <groupId>nl.knaw.dans</groupId>
+    <artifactId>dans-bagit-lib</artifactId>
+    <version>{version}</version> <!-- <=== FILL LIBRARY VERSION TO USE HERE -->
+</dependency>
+```

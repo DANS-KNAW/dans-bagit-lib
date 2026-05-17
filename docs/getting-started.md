@@ -1,6 +1,13 @@
 Getting started
 ===============
 
+Basic usage
+-----------
+
+For including the library as a dependency in a Maven project, see [the installation instructions](./index.md#using-the-library)
+
+A basic usage example follows:
+
 ### Create a bag from a folder using version 0.97
 
 ```java
@@ -102,25 +109,6 @@ Path rootDir=Paths.get("RootDirectoryOfExistingBag");
     BagLinter linter=new BagLinter();
     List<BagitWarning> warnings=linter.lintBag(rootDir,Arrays.asList(BagitWarning.OLD_BAGIT_VERSION);
 ```
-
-### Serialization
-
-The dans-bagit-lib does not support directly
-serializing a bag to an archive file. The examples show how to implement a
-custom serializer for the
-[zip](https://github.com/DANS-KNAW/dans-bagit-lib/blob/master/src/test/java/nl/knaw/dans/bagit/examples/serialization/CreateZipBagExample.java){:target=_blank:}
-and
-[tar](https://github.com/DANS-KNAW/dans-bagit-lib/blob/master/src/test/java/nl/knaw/dans/bagit/examples/serialization/CreateTarBagExample.java){:target=_blank:}
-formats.
-
-### Fetching
-
-If you need `fetch.txt` functionality, the
-[`FetchHttpFileExample` example](https://github.com/DANS-KNAW/dans-bagit-lib/blob/master/src/test/java/nl/knaw/dans/bagit/examples/fetching/FetchHttpFileExample.java){:target=_blank:}
-demonstrates how you can implement this feature with your additional application
-and workflow requirements.
-
-### Internationalization
 
 All logging and error messages have been put into a [ResourceBundle](https://docs.oracle.com/javase/7/docs/api/java/util/ResourceBundle.html){:target=_blank:}.
 This allows for all the messages to be translated to multiple languages and automatically used during runtime.

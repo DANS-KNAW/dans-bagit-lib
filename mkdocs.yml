@@ -22,11 +22,12 @@ repo_name: DANS-KNAW/dans-bagit-lib
 repo_url: https://github.com/DANS-KNAW/dans-bagit-lib
 
 nav:
-  - Manual: index.md
-  - Getting started: getting-started.md
-  - JavaDoc: javadoc.md
-  - Maven project info: api.md
-  - Development: dev.md
+  - Manual:
+      - Description: index.md
+      - Getting started: getting-started.md
+  - JavaDocs: api.md
+  - Development:
+      - Overview: dev.md
 
 extra:
   deposit_directory: https://dans-knaw.github.io/dans-datastation-architecture/deposit-directory/
