@@ -26,7 +26,7 @@ jobs:
           cache: 'maven'
 
       - name: Generate maven site
-        run: mvn -B clean test site jacoco:report coveralls:report --file pom.xml -DrepoToken=${{ secrets.COVERALLS_REPO_TOKEN }} -Djarsigner.skip=true
+        run: mvn -B clean test site
 
       - name: Copy javadocs to site folder
         run: cp -r target/site/ docs/mvnsite/
