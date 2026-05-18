@@ -25,7 +25,8 @@ nav:
   - Manual:
       - Description: index.md
       - Getting started: getting-started.md
-  - JavaDocs: api.md
+      - JavaDocs: api.md
+      - Context: context.md
   - Development:
       - Overview: dev.md
 
