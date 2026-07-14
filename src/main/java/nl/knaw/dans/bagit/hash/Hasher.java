@@ -53,11 +53,13 @@ public final class Hasher {
     public static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
     public static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
     public static final String MAX_REDIRECTS_PROP = "nl.knaw.dans.bagit.hash.maxRedirects";
+    public static final String FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL_PROP = "nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail";
 
     private static final int DEFAULT_CHUNK_SIZE = 1024 * 1024 * 128; // 128 MB
     private static final int DEFAULT_MAX_RETRIES = 5;
     private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
     private static final int DEFAULT_MAX_REDIRECTS = 20;
+    private static final boolean DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL = true;
 
     private Hasher() {
         //intentionally left empty
@@ -203,9 +205,15 @@ public final class Hasher {
                 throw e;
             }
             catch (IOException e) {
-                logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
-                messageDigest.reset();
-                return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);
+                if (effectiveOptions.isFallBackToFullStreamOnRangeFail()) {
+                    logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
+                    messageDigest.reset();
+                    return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);
+                }
+                else {
+                    logger.error("Failed range requests for {}, and fallback to full stream is disabled", currentUrl);
+                    throw e;
+                }
             }
         }
 
@@ -503,6 +511,7 @@ public final class Hasher {
         private final int maxRetries;
         private final int retrySleepMs;
         private final int maxRedirects;
+        private final boolean fallBackToFullStreamOnRangeFail;
 
         /**
          * Constructs an instance of {@code HashOptions} with specific configuration settings for chunk size, retry behavior, and redirection limits.
@@ -513,7 +522,7 @@ public final class Hasher {
          * @param maxRedirects the maximum number of redirects allowed; must be greater than or equal to 0
          * @throws IllegalArgumentException if {@code chunkSize} is less than or equal to 0 or if {@code maxRetries} is less than 0
          */
-        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs, final int maxRedirects) {
+        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs, final int maxRedirects, boolean fallBackToFullStreamOnRangeFail) {
             if (chunkSize <= 0) {
                 throw new IllegalArgumentException("chunkSize must be greater than 0");
             }
@@ -527,6 +536,7 @@ public final class Hasher {
             this.maxRetries = maxRetries;
             this.retrySleepMs = retrySleepMs;
             this.maxRedirects = maxRedirects;
+            this.fallBackToFullStreamOnRangeFail = fallBackToFullStreamOnRangeFail;
         }
 
         /**
@@ -545,7 +555,8 @@ public final class Hasher {
                 Integer.getInteger(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),
                 Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES),
                 Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS),
-                Integer.getInteger(MAX_REDIRECTS_PROP, DEFAULT_MAX_REDIRECTS)
+                Integer.getInteger(MAX_REDIRECTS_PROP, DEFAULT_MAX_REDIRECTS),
+                Boolean.parseBoolean(System.getProperty(FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL_PROP, String.valueOf(DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL)))
             );
         }
 
@@ -561,11 +572,28 @@ public final class Hasher {
          * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
          */
         public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects) {
+            return withOverrides(chunkSize, maxRetries, retrySleepMs, maxRedirects, null);
+        }
+
+        /**
+         * Returns a new {@code HashOptions} instance with the specified overrides for configuration parameters. If a parameter is {@code null}, the existing value from the current {@code HashOptions}
+         * instance is used.
+         *
+         * @param chunkSize    the size of data chunks in bytes; if {@code null}, the existing chunk size is retained
+         * @param maxRetries   the maximum number of retry attempts; if {@code null}, the existing max retries value is retained
+         * @param retrySleepMs the time in milliseconds to sleep between retries; if {@code null}, the existing retry sleep time is retained
+         * @param maxRedirects the maximum number of redirects allowed; if {@code null}, the existing max redirects value is retained
+         * @param fallBackToFullStreamOnRangeFail whether to fall back to full stream; if {@code null}, the existing value is retained
+         * @return a new {@code HashOptions} instance with the specified values or the existing values if overrides are {@code null}
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects, final Boolean fallBackToFullStreamOnRangeFail) {
             return new HashOptions(
                 chunkSize == null ? this.chunkSize : chunkSize,
                 maxRetries == null ? this.maxRetries : maxRetries,
                 retrySleepMs == null ? this.retrySleepMs : retrySleepMs,
-                maxRedirects == null ? this.maxRedirects : maxRedirects
+                maxRedirects == null ? this.maxRedirects : maxRedirects,
+                fallBackToFullStreamOnRangeFail == null ? this.fallBackToFullStreamOnRangeFail : fallBackToFullStreamOnRangeFail
             );
         }
 
@@ -583,6 +611,10 @@ public final class Hasher {
 
         public int getMaxRedirects() {
             return maxRedirects;
+        }
+
+        public boolean isFallBackToFullStreamOnRangeFail() {
+            return fallBackToFullStreamOnRangeFail;
         }
     }
 }
