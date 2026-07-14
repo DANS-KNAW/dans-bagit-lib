@@ -63,6 +63,7 @@ public final class BagVerifier implements AutoCloseable{
   private Integer maxRetries;
   private Integer retrySleepMs;
   private Integer maxRedirects;
+  private Boolean fallBackToFullStreamOnRangeFail;
   
   /**
    * Create a BagVerifier with a cached thread pool and a 
@@ -123,6 +124,10 @@ public final class BagVerifier implements AutoCloseable{
 
   public void setMaxRedirects(final int maxRedirects) {
     this.maxRedirects = maxRedirects;
+  }
+
+  public void setFallBackToFullStreamOnRangeFail(final boolean fallBackToFullStreamOnRangeFail) {
+    this.fallBackToFullStreamOnRangeFail = fallBackToFullStreamOnRangeFail;
   }
   
   /**
@@ -247,7 +252,7 @@ public final class BagVerifier implements AutoCloseable{
   }
 
   HashOptions getHashOptions() {
-    return HashOptions.systemProperties().withOverrides(chunkSize, maxRetries, retrySleepMs, maxRedirects);
+    return HashOptions.systemProperties().withOverrides(chunkSize, maxRetries, retrySleepMs, maxRedirects, fallBackToFullStreamOnRangeFail);
   }
   
   /**

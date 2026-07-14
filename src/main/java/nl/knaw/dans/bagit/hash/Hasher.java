@@ -334,6 +334,7 @@ public final class Hasher {
                 throw new IOException("Received empty response for range request " + range + " from " + conn.getURL());
             }
             messageDigest.update(bytes);
+            logger.debug("Updated message digest with range " + range);
             return ChunkResult.success(bytes.length, totalSize);
         }
     }
