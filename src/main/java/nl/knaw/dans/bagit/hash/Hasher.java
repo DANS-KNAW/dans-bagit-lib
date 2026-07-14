@@ -116,7 +116,7 @@ public final class Hasher {
         Map<String, String> currentHeaders = extraHeaders;
 
         if (!currentUrl.getProtocol().startsWith("http")) {
-            return hashFullStream(currentUrl, messageDigest, currentHeaders);
+            return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);
         }
 
         HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;
@@ -145,13 +145,14 @@ public final class Hasher {
                     }
 
                     if (code == 206) {
-                        return handlePartialContent(conn, messageDigest, finalTotalSize);
+                        return handlePartialContent(conn, messageDigest, finalTotalSize, range);
                     }
                     else if (code == 200) {
                         if (finalOffset > 0) {
                             throw new ProtocolException("Server returned 200 OK for range request " + range + " from " + finalUrl);
                         }
                         logger.info("Server returned 200 OK for first range request (probably range requests are not supported); downloading full stream from {}", finalUrl);
+                        messageDigest.reset(); // Reset in case we got here after a retry
                         try (InputStream is = conn.getInputStream()) {
                             long totalRead = updateDigestFromStream(is, messageDigest);
                             if (finalTotalSize >= 0 && totalRead != finalTotalSize) {
@@ -195,46 +196,70 @@ public final class Hasher {
             catch (IOException e) {
                 logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
                 messageDigest.reset();
-                return hashFullStream(currentUrl, messageDigest, currentHeaders);
+                return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);
             }
         }
 
         return formatMessageDigest(messageDigest);
     }
 
-    private static String hashFullStream(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders) throws IOException {
-        URL currentUrl = url;
-        Map<String, String> currentHeaders = extraHeaders;
+    private static String hashFullStream(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders, final HashOptions hashOptions) throws IOException {
+        HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;
+        int maxRetries = effectiveOptions.getMaxRetries();
+        int retrySleepMs = effectiveOptions.getRetrySleepMs();
 
-        while (true) {
-            URLConnection conn = currentUrl.openConnection();
-            if (conn instanceof HttpURLConnection httpConn) {
-                httpConn.setInstanceFollowRedirects(false);
-                if (currentHeaders != null) {
-                    for (Entry<String, String> entry : currentHeaders.entrySet()) {
-                        httpConn.setRequestProperty(entry.getKey(), entry.getValue());
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            URL currentUrl = url;
+            Map<String, String> currentHeaders = extraHeaders;
+            try {
+                while (true) {
+                    URLConnection conn = currentUrl.openConnection();
+                    if (conn instanceof HttpURLConnection httpConn) {
+                        httpConn.setInstanceFollowRedirects(false);
+                        if (currentHeaders != null) {
+                            for (Entry<String, String> entry : currentHeaders.entrySet()) {
+                                httpConn.setRequestProperty(entry.getKey(), entry.getValue());
+                            }
+                        }
+                        int code = httpConn.getResponseCode();
+                        if (code >= 300 && code < 400) {
+                            String location = httpConn.getHeaderField("Location");
+                            URL nextUrl = new URL(currentUrl, location);
+                            if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
+                                currentHeaders = null;
+                            }
+                            currentUrl = nextUrl;
+                            continue;
+                        }
+                        if (code != 200) {
+                            throw new IOException("Unexpected response code " + code + " for " + currentUrl);
+                        }
+                    }
+                    try (final InputStream is = conn.getInputStream()) {
+                        updateDigestFromStream(is, messageDigest);
+                    }
+                    break;
+                }
+                return formatMessageDigest(messageDigest);
+            }
+            catch (IOException e) {
+                logger.warn("Error fetching full stream from {} (attempt {}/{}): {}", url, attempt + 1, maxRetries, e.getMessage());
+                messageDigest.reset();
+                if (attempt < maxRetries - 1) {
+                    try {
+                        Thread.sleep(retrySleepMs);
+                    }
+                    catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Interrupted during retry sleep", ie);
                     }
                 }
-                int code = httpConn.getResponseCode();
-                if (code >= 300 && code < 400) {
-                    String location = httpConn.getHeaderField("Location");
-                    URL nextUrl = new URL(currentUrl, location);
-                    if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
-                        currentHeaders = null;
-                    }
-                    currentUrl = nextUrl;
-                    continue;
-                }
-                if (code != 200) {
-                    throw new IOException("Unexpected response code " + code + " for " + currentUrl);
+                else {
+                    throw e;
                 }
             }
-            try (final InputStream is = conn.getInputStream()) {
-                updateDigestFromStream(is, messageDigest);
-            }
-            break;
         }
-        return formatMessageDigest(messageDigest);
+        throw new IOException("Max retries exceeded");
     }
 
     /**
@@ -264,7 +289,7 @@ public final class Hasher {
         return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders, hashOptions);
     }
 
-    private static ChunkResult handlePartialContent(HttpURLConnection conn, MessageDigest messageDigest, long currentTotalSize) throws IOException {
+    private static ChunkResult handlePartialContent(HttpURLConnection conn, MessageDigest messageDigest, long currentTotalSize, String range) throws IOException {
         long totalSize = currentTotalSize;
         if (totalSize < 0) {
             String contentRange = conn.getHeaderField("Content-Range");
@@ -278,8 +303,13 @@ public final class Hasher {
             }
         }
         try (InputStream is = conn.getInputStream()) {
-            long bytesRead = updateDigestFromStream(is, messageDigest);
-            return ChunkResult.success(bytesRead, totalSize);
+            byte[] bytes = is.readAllBytes();
+            if (bytes.length == 0) {
+                // N.B. getting the range from the connection at this point may throw an exception, so we use the range we already have.
+                throw new IOException("Received empty response for range request " + range + " from " + conn.getURL());
+            }
+            messageDigest.update(bytes);
+            return ChunkResult.success(bytes.length, totalSize);
         }
     }
 
