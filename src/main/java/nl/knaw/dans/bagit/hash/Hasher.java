@@ -24,6 +24,7 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -52,7 +53,7 @@ public final class Hasher {
     public static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
     public static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
 
-    private static final long DEFAULT_CHUNK_SIZE = 1024L * 1024L * 1024L; // 1 GiB
+    private static final long DEFAULT_CHUNK_SIZE = 1024L * 1024L * 128; // 128 MB
     private static final int DEFAULT_MAX_RETRIES = 5;
     private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
 
@@ -130,6 +131,7 @@ public final class Hasher {
 
             final URL finalUrl = currentUrl;
             final Map<String, String> finalHeaders = currentHeaders;
+            final long finalOffset = offset;
             final long finalTotalSize = totalSize;
 
             try {
@@ -146,9 +148,15 @@ public final class Hasher {
                         return handlePartialContent(conn, messageDigest, finalTotalSize);
                     }
                     else if (code == 200) {
-                        logger.info("Server returned 200 OK for range request (probably range requests are not supported); downloading full stream from {}", finalUrl);
+                        if (finalOffset > 0) {
+                            throw new ProtocolException("Server returned 200 OK for range request " + range + " from " + finalUrl);
+                        }
+                        logger.info("Server returned 200 OK for first range request (probably range requests are not supported); downloading full stream from {}", finalUrl);
                         try (InputStream is = conn.getInputStream()) {
-                            updateDigestFromStream(is, messageDigest);
+                            long totalRead = updateDigestFromStream(is, messageDigest);
+                            if (finalTotalSize >= 0 && totalRead != finalTotalSize) {
+                                throw new IOException("Expected to read " + finalTotalSize + " bytes but read " + totalRead + " bytes from " + finalUrl);
+                            }
                         }
                         return ChunkResult.fullStream(formatMessageDigest(messageDigest));
                     }
@@ -180,6 +188,9 @@ public final class Hasher {
                     logger.debug("Successfully processed chunk for range {} from {}", range, currentUrl);
                     logger.debug("Read {} of {}{}", offset, totalSize > 0 ? totalSize : "Unknown", totalSize > 0 ? " (" + (offset * 100L / totalSize) + "%)" : "");
                 }
+            }
+            catch (ProtocolException e) {
+                throw e;
             }
             catch (IOException e) {
                 logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
@@ -267,10 +278,7 @@ public final class Hasher {
             }
         }
         try (InputStream is = conn.getInputStream()) {
-            int bytesRead = updateDigestFromStream(is, messageDigest);
-            if (bytesRead < 0) {
-                throw new IOException("Stream closed unexpectedly for " + conn.getURL());
-            }
+            long bytesRead = updateDigestFromStream(is, messageDigest);
             return ChunkResult.success(bytesRead, totalSize);
         }
     }
@@ -283,6 +291,9 @@ public final class Hasher {
                     return result; // Break the retry loop for redirects
                 }
                 return result;
+            }
+            catch (ProtocolException e) {
+                throw e;
             }
             catch (IOException e) {
                 logger.warn("{} (attempt {}/{}): {}", description, attempt + 1, maxRetries, e.getMessage());
@@ -318,12 +329,12 @@ public final class Hasher {
      */
     private static class ChunkResult {
         final ChunkResultType type;
-        final int bytesRead;
+        final long bytesRead;
         final long totalSize;
         final String location;
         final String hash;
 
-        private ChunkResult(ChunkResultType type, int bytesRead, long totalSize, String location, String hash) {
+        private ChunkResult(ChunkResultType type, long bytesRead, long totalSize, String location, String hash) {
             this.type = type;
             this.bytesRead = bytesRead;
             this.totalSize = totalSize;
@@ -331,7 +342,7 @@ public final class Hasher {
             this.hash = hash;
         }
 
-        static ChunkResult success(int bytesRead, long totalSize) {
+        static ChunkResult success(long bytesRead, long totalSize) {
             return new ChunkResult(ChunkResultType.SUCCESS, bytesRead, totalSize, null, null);
         }
 
@@ -364,9 +375,9 @@ public final class Hasher {
     /**
      * Reads from the InputStream and updates the MessageDigest. Returns the number of bytes read.
      */
-    private static int updateDigestFromStream(InputStream is, MessageDigest messageDigest) throws IOException {
+    private static long updateDigestFromStream(InputStream is, MessageDigest messageDigest) throws IOException {
         byte[] buffer = new byte[CHUNK_SIZE];
-        int totalRead = 0;
+        long totalRead = 0;
         int read = is.read(buffer);
         while (read != -1) {
             messageDigest.update(buffer, 0, read);
