@@ -38,6 +38,8 @@ import nl.knaw.dans.bagit.exceptions.FileNotInManifestException;
 import nl.knaw.dans.bagit.exceptions.FileNotInPayloadDirectoryException;
 import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
 import nl.knaw.dans.bagit.exceptions.VerificationException;
+import nl.knaw.dans.bagit.hash.Hasher;
+import nl.knaw.dans.bagit.hash.Hasher.HashOptions;
 import nl.knaw.dans.bagit.hash.StandardSupportedAlgorithms;
 import nl.knaw.dans.bagit.hash.SupportedAlgorithm;
 import nl.knaw.dans.bagit.reader.BagReader;
@@ -91,6 +93,35 @@ public class BagVerifierTest extends TempFolderTest{
       StandardSupportedAlgorithms algorithm = StandardSupportedAlgorithms.valueOf(alg.toUpperCase());
       Manifest manifest = new Manifest(algorithm);
       sut.checkHashes(manifest);
+    }
+  }
+
+  @Test
+  public void hash_options_on_bag_verifier_override_system_properties() {
+    System.setProperty(Hasher.CHUNK_SIZE_PROP, "10");
+    System.setProperty(Hasher.MAX_RETRIES_PROP, "2");
+    System.setProperty(Hasher.RETRY_SLEEP_MS_PROP, "30");
+    try {
+      HashOptions systemHashOptions = sut.getHashOptions();
+
+      Assertions.assertEquals(10, systemHashOptions.getChunkSize());
+      Assertions.assertEquals(2, systemHashOptions.getMaxRetries());
+      Assertions.assertEquals(30, systemHashOptions.getRetrySleepMs());
+
+      sut.setChunkSize(20);
+      sut.setMaxRetries(3);
+      sut.setRetrySleepMs(40);
+
+      HashOptions hashOptions = sut.getHashOptions();
+
+      Assertions.assertEquals(20, hashOptions.getChunkSize());
+      Assertions.assertEquals(3, hashOptions.getMaxRetries());
+      Assertions.assertEquals(40, hashOptions.getRetrySleepMs());
+    }
+    finally {
+      System.clearProperty(Hasher.CHUNK_SIZE_PROP);
+      System.clearProperty(Hasher.MAX_RETRIES_PROP);
+      System.clearProperty(Hasher.RETRY_SLEEP_MS_PROP);
     }
   }
   

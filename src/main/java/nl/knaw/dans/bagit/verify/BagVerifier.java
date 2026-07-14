@@ -45,6 +45,7 @@ import nl.knaw.dans.bagit.exceptions.PayloadOxumDoesNotExistException;
 import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
 import nl.knaw.dans.bagit.exceptions.VerificationException;
 import nl.knaw.dans.bagit.hash.BagitAlgorithmNameToSupportedAlgorithmMapping;
+import nl.knaw.dans.bagit.hash.Hasher.HashOptions;
 import nl.knaw.dans.bagit.hash.StandardBagitAlgorithmNameToSupportedAlgorithmMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +59,9 @@ public final class BagVerifier implements AutoCloseable{
   
   private final ManifestVerifier manifestVerifier;
   private final ExecutorService executor;
+  private Long chunkSize;
+  private Integer maxRetries;
+  private Integer retrySleepMs;
   
   /**
    * Create a BagVerifier with a cached thread pool and a 
@@ -102,6 +106,18 @@ public final class BagVerifier implements AutoCloseable{
     //shutdown the thread pool so the resource isn't leaked
     executor.shutdown();
     manifestVerifier.close();
+  }
+
+  public void setChunkSize(final long chunkSize) {
+    this.chunkSize = chunkSize;
+  }
+
+  public void setMaxRetries(final int maxRetries) {
+    this.maxRetries = maxRetries;
+  }
+
+  public void setRetrySleepMs(final int retrySleepMs) {
+    this.retrySleepMs = retrySleepMs;
   }
   
   /**
@@ -206,9 +222,10 @@ public final class BagVerifier implements AutoCloseable{
 
     //TODO maybe return all of these at some point...
     final Collection<Exception> exceptions = Collections.synchronizedCollection(new ArrayList<>());
+    final HashOptions hashOptions = getHashOptions();
 
     for(final Entry<Path, String> entry : manifest.getFileToChecksumMap().entrySet()){
-      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs));
+      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs, hashOptions));
     }
 
     latch.await();
@@ -222,6 +239,10 @@ public final class BagVerifier implements AutoCloseable{
 
       throw new VerificationException(e);
     }
+  }
+
+  HashOptions getHashOptions() {
+    return HashOptions.systemProperties().withOverrides(chunkSize, maxRetries, retrySleepMs);
   }
   
   /**

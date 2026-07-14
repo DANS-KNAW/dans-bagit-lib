@@ -48,9 +48,9 @@ public final class Hasher {
     private static final int CHUNK_SIZE = _64_KB;
     private static final ResourceBundle messages = ResourceBundle.getBundle("MessageBundle");
 
-    private static final String CHUNK_SIZE_PROP = "nl.knaw.dans.bagit.hash.chunkSize";
-    private static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
-    private static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
+    public static final String CHUNK_SIZE_PROP = "nl.knaw.dans.bagit.hash.chunkSize";
+    public static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
+    public static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
 
     private static final long DEFAULT_CHUNK_SIZE = 1024L * 1024L * 1024L; // 1 GiB
     private static final int DEFAULT_MAX_RETRIES = 5;
@@ -87,15 +87,29 @@ public final class Hasher {
     }
 
     /**
-     * Create a HEX formatted string checksum hash of the data from the {@link FetchItem}
+     * Create a HEX-formatted string checksum hash of the data from the {@link FetchItem}
      *
      * @param item          the {@link FetchItem} to hash
      * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
      * @param extraHeaders  optional extra headers to send with the request
-     * @return the hash as a hex formatted string
+     * @return the hash as a hex-formatted string
      * @throws IOException if there is a problem reading from the URL
      */
     public static String hash(final FetchItem item, final MessageDigest messageDigest, final Map<String, String> extraHeaders) throws IOException {
+        return hash(item, messageDigest, extraHeaders, HashOptions.systemProperties());
+    }
+
+    /**
+     * Create a HEX-formatted string checksum hash of the data from the {@link FetchItem}
+     *
+     * @param item          the {@link FetchItem} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @param hashOptions   optional settings for ranged HTTP requests
+     * @return the hash as a hex-formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final FetchItem item, final MessageDigest messageDigest, final Map<String, String> extraHeaders, final HashOptions hashOptions) throws IOException {
         long totalSize = (item.length != null && item.length >= 0) ? item.length : -1;
         URL currentUrl = item.url;
         Map<String, String> currentHeaders = extraHeaders;
@@ -104,9 +118,10 @@ public final class Hasher {
             return hashFullStream(currentUrl, messageDigest, currentHeaders);
         }
 
-        long chunkSize = Long.getLong(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE);
-        int maxRetries = Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES);
-        int retrySleepMs = Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS);
+        HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;
+        long chunkSize = effectiveOptions.getChunkSize();
+        int maxRetries = effectiveOptions.getMaxRetries();
+        int retrySleepMs = effectiveOptions.getRetrySleepMs();
 
         long offset = 0;
         while (totalSize < 0 || offset < totalSize) {
@@ -222,6 +237,20 @@ public final class Hasher {
      */
     public static String hash(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders) throws IOException {
         return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders);
+    }
+
+    /**
+     * Create a HEX formatted string checksum hash of the data from the URL
+     *
+     * @param url           the {@link URL} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @param hashOptions   optional settings for ranged HTTP requests
+     * @return the hash as a hex formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders, final HashOptions hashOptions) throws IOException {
+        return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders, hashOptions);
     }
 
     private static ChunkResult handlePartialContent(HttpURLConnection conn, MessageDigest messageDigest, long currentTotalSize) throws IOException {
@@ -410,5 +439,45 @@ public final class Hasher {
         }
 
         return map;
+    }
+
+    public static final class HashOptions {
+        private final long chunkSize;
+        private final int maxRetries;
+        private final int retrySleepMs;
+
+        public HashOptions(final long chunkSize, final int maxRetries, final int retrySleepMs) {
+            this.chunkSize = chunkSize;
+            this.maxRetries = maxRetries;
+            this.retrySleepMs = retrySleepMs;
+        }
+
+        public static HashOptions systemProperties() {
+            return new HashOptions(
+                Long.getLong(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),
+                Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES),
+                Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS)
+            );
+        }
+
+        public HashOptions withOverrides(final Long chunkSize, final Integer maxRetries, final Integer retrySleepMs) {
+            return new HashOptions(
+                chunkSize == null ? this.chunkSize : chunkSize,
+                maxRetries == null ? this.maxRetries : maxRetries,
+                retrySleepMs == null ? this.retrySleepMs : retrySleepMs
+            );
+        }
+
+        public long getChunkSize() {
+            return chunkSize;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public int getRetrySleepMs() {
+            return retrySleepMs;
+        }
     }
 }
