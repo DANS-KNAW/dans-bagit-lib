@@ -52,10 +52,12 @@ public final class Hasher {
     public static final String CHUNK_SIZE_PROP = "nl.knaw.dans.bagit.hash.chunkSize";
     public static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
     public static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
+    public static final String MAX_REDIRECTS_PROP = "nl.knaw.dans.bagit.hash.maxRedirects";
 
     private static final int DEFAULT_CHUNK_SIZE = 1024 * 1024 * 128; // 128 MB
     private static final int DEFAULT_MAX_RETRIES = 5;
     private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
+    private static final int DEFAULT_MAX_REDIRECTS = 20;
 
     private Hasher() {
         //intentionally left empty
@@ -123,6 +125,8 @@ public final class Hasher {
         long chunkSize = effectiveOptions.getChunkSize();
         int maxRetries = effectiveOptions.getMaxRetries();
         int retrySleepMs = effectiveOptions.getRetrySleepMs();
+        int maxRedirects = effectiveOptions.getMaxRedirects();
+        int redirectCount = 0;
 
         long offset = 0;
         while (totalSize < 0 || offset < totalSize) {
@@ -169,10 +173,14 @@ public final class Hasher {
                 logger.debug("Processing chunk result for range {} from {}", range, currentUrl);
 
                 if (result.type == ChunkResultType.FULL_STREAM_SUCCESS) {
+                    redirectCount = 0;
                     logger.debug("Successfully processed full stream for range {} from {}", range, currentUrl);
                     return result.hash;
                 }
                 else if (result.type == ChunkResultType.REDIRECT) {
+                    if (++redirectCount > maxRedirects) {
+                        throw new ProtocolException("Too many redirects");
+                    }
                     URL nextUrl = new URL(currentUrl, result.location);
                     if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
                         currentHeaders = null;
@@ -182,6 +190,7 @@ public final class Hasher {
                     // Skip offset update and retry the current chunk with new URL
                 }
                 else if (result.type == ChunkResultType.SUCCESS) {
+                    redirectCount = 0;
                     offset += result.bytesRead;
                     if (totalSize < 0 && result.totalSize > 0) {
                         totalSize = result.totalSize;
@@ -207,11 +216,13 @@ public final class Hasher {
         HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;
         int maxRetries = effectiveOptions.getMaxRetries();
         int retrySleepMs = effectiveOptions.getRetrySleepMs();
+        int maxRedirects = effectiveOptions.getMaxRedirects();
 
         for (int attempt = 0; attempt < maxRetries; attempt++) {
             URL currentUrl = url;
             Map<String, String> currentHeaders = extraHeaders;
             try {
+                int redirectCount = 0;
                 while (true) {
                     URLConnection conn = currentUrl.openConnection();
                     if (conn instanceof HttpURLConnection httpConn) {
@@ -223,6 +234,9 @@ public final class Hasher {
                         }
                         int code = httpConn.getResponseCode();
                         if (code >= 300 && code < 400) {
+                            if (++redirectCount > maxRedirects) {
+                                throw new ProtocolException("Too many redirects");
+                            }
                             String location = httpConn.getHeaderField("Location");
                             URL nextUrl = new URL(currentUrl, location);
                             if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
@@ -241,6 +255,9 @@ public final class Hasher {
                     break;
                 }
                 return formatMessageDigest(messageDigest);
+            }
+            catch (ProtocolException e) {
+                throw e;
             }
             catch (IOException e) {
                 logger.warn("Error fetching full stream from {} (attempt {}/{}): {}", url, attempt + 1, maxRetries, e.getMessage());
@@ -316,11 +333,7 @@ public final class Hasher {
     private static ChunkResult executeWithRetry(RetryableOperation<ChunkResult> operation, String description, int maxRetries, int retrySleepMs) throws IOException {
         for (int attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                ChunkResult result = operation.execute();
-                if (result.type == ChunkResultType.REDIRECT) {
-                    return result; // Break the retry loop for redirects
-                }
-                return result;
+                return operation.execute();
             }
             catch (ProtocolException e) {
                 throw e;
@@ -482,34 +495,81 @@ public final class Hasher {
         return map;
     }
 
+    /**
+     * Represents configuration options for hashing operations. This class is immutable and provides various configurable parameters such as chunk size, retry behavior, and redirection limits.
+     */
     public static final class HashOptions {
         private final int chunkSize;
         private final int maxRetries;
         private final int retrySleepMs;
+        private final int maxRedirects;
 
-        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs) {
+        /**
+         * Constructs an instance of {@code HashOptions} with specific configuration settings for chunk size, retry behavior, and redirection limits.
+         *
+         * @param chunkSize    the size of data chunks in bytes; must be greater than 0
+         * @param maxRetries   the maximum number of retry attempts; must be greater than 0
+         * @param retrySleepMs the time in milliseconds to sleep between retries
+         * @param maxRedirects the maximum number of redirects allowed; must be greater than or equal to 0
+         * @throws IllegalArgumentException if {@code chunkSize} is less than or equal to 0 or if {@code maxRetries} is less than 0
+         */
+        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs, final int maxRedirects) {
+            if (chunkSize <= 0) {
+                throw new IllegalArgumentException("chunkSize must be greater than 0");
+            }
+            if (maxRetries <= 0) {
+                throw new IllegalArgumentException("maxRetries must be greater than or equal to 0");
+            }
+            if (maxRedirects < 0) {
+                throw new IllegalArgumentException("maxRedirects must be greater than or equal to 0");
+            }
             this.chunkSize = chunkSize;
             this.maxRetries = maxRetries;
             this.retrySleepMs = retrySleepMs;
+            this.maxRedirects = maxRedirects;
         }
 
+        /**
+         * Creates an instance of {@code HashOptions} using system properties to determine the configuration values for chunk size, maximum retries, retry sleep time, and maximum redirects. Defaults
+         * are used if the respective system properties are not set.
+         *
+         * The following system properties are used: - {@code CHUNK_SIZE_PROP}: Configures the chunk size in bytes (default: {@code DEFAULT_CHUNK_SIZE}). - {@code MAX_RETRIES_PROP}: Configures the
+         * maximum number of retry attempts (default: {@code DEFAULT_MAX_RETRIES}). - {@code RETRY_SLEEP_MS_PROP}: Configures the sleep time in milliseconds between retries (default:
+         * {@code DEFAULT_RETRY_SLEEP_MS}). - {@code MAX_REDIRECTS_PROP}: Configures the maximum allowable redirects (default: {@code DEFAULT_MAX_REDIRECTS}).
+         *
+         * @return a {@code HashOptions} instance populated with configuration values derived from system properties or their default values.
+         * @throws IllegalArgumentException if any of the retrieved values are invalid (e.g., negative or zero where not allowed)
+         */
         public static HashOptions systemProperties() {
             return new HashOptions(
                 Integer.getInteger(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),
                 Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES),
-                Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS)
+                Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS),
+                Integer.getInteger(MAX_REDIRECTS_PROP, DEFAULT_MAX_REDIRECTS)
             );
         }
 
-        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs) {
+        /**
+         * Returns a new {@code HashOptions} instance with the specified overrides for configuration parameters. If a parameter is {@code null}, the existing value from the current {@code HashOptions}
+         * instance is used.
+         *
+         * @param chunkSize    the size of data chunks in bytes; if {@code null}, the existing chunk size is retained
+         * @param maxRetries   the maximum number of retry attempts; if {@code null}, the existing max retries value is retained
+         * @param retrySleepMs the time in milliseconds to sleep between retries; if {@code null}, the existing retry sleep time is retained
+         * @param maxRedirects the maximum number of redirects allowed; if {@code null}, the existing max redirects value is retained
+         * @return a new {@code HashOptions} instance with the specified values or the existing values if overrides are {@code null}
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects) {
             return new HashOptions(
                 chunkSize == null ? this.chunkSize : chunkSize,
                 maxRetries == null ? this.maxRetries : maxRetries,
-                retrySleepMs == null ? this.retrySleepMs : retrySleepMs
+                retrySleepMs == null ? this.retrySleepMs : retrySleepMs,
+                maxRedirects == null ? this.maxRedirects : maxRedirects
             );
         }
 
-        public long getChunkSize() {
+        public int getChunkSize() {
             return chunkSize;
         }
 
@@ -519,6 +579,10 @@ public final class Hasher {
 
         public int getRetrySleepMs() {
             return retrySleepMs;
+        }
+
+        public int getMaxRedirects() {
+            return maxRedirects;
         }
     }
 }

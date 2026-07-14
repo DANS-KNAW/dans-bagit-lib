@@ -62,6 +62,7 @@ public final class BagVerifier implements AutoCloseable{
   private Integer chunkSize;
   private Integer maxRetries;
   private Integer retrySleepMs;
+  private Integer maxRedirects;
   
   /**
    * Create a BagVerifier with a cached thread pool and a 
@@ -118,6 +119,10 @@ public final class BagVerifier implements AutoCloseable{
 
   public void setRetrySleepMs(final int retrySleepMs) {
     this.retrySleepMs = retrySleepMs;
+  }
+
+  public void setMaxRedirects(final int maxRedirects) {
+    this.maxRedirects = maxRedirects;
   }
   
   /**
@@ -242,7 +247,7 @@ public final class BagVerifier implements AutoCloseable{
   }
 
   HashOptions getHashOptions() {
-    return HashOptions.systemProperties().withOverrides(chunkSize, maxRetries, retrySleepMs);
+    return HashOptions.systemProperties().withOverrides(chunkSize, maxRetries, retrySleepMs, maxRedirects);
   }
   
   /**
