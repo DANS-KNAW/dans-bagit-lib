@@ -53,7 +53,7 @@ public final class Hasher {
     public static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
     public static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
 
-    private static final long DEFAULT_CHUNK_SIZE = 1024L * 1024L * 128; // 128 MB
+    private static final int DEFAULT_CHUNK_SIZE = 1024 * 1024 * 128; // 128 MB
     private static final int DEFAULT_MAX_RETRIES = 5;
     private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
 
@@ -483,11 +483,11 @@ public final class Hasher {
     }
 
     public static final class HashOptions {
-        private final long chunkSize;
+        private final int chunkSize;
         private final int maxRetries;
         private final int retrySleepMs;
 
-        public HashOptions(final long chunkSize, final int maxRetries, final int retrySleepMs) {
+        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs) {
             this.chunkSize = chunkSize;
             this.maxRetries = maxRetries;
             this.retrySleepMs = retrySleepMs;
@@ -495,13 +495,13 @@ public final class Hasher {
 
         public static HashOptions systemProperties() {
             return new HashOptions(
-                Long.getLong(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),
+                Integer.getInteger(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),
                 Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES),
                 Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS)
             );
         }
 
-        public HashOptions withOverrides(final Long chunkSize, final Integer maxRetries, final Integer retrySleepMs) {
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs) {
             return new HashOptions(
                 chunkSize == null ? this.chunkSize : chunkSize,
                 maxRetries == null ? this.maxRetries : maxRetries,

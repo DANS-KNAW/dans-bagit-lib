@@ -59,7 +59,7 @@ public final class BagVerifier implements AutoCloseable{
   
   private final ManifestVerifier manifestVerifier;
   private final ExecutorService executor;
-  private Long chunkSize;
+  private Integer chunkSize;
   private Integer maxRetries;
   private Integer retrySleepMs;
   
@@ -108,7 +108,7 @@ public final class BagVerifier implements AutoCloseable{
     manifestVerifier.close();
   }
 
-  public void setChunkSize(final long chunkSize) {
+  public void setChunkSize(final int chunkSize) {
     this.chunkSize = chunkSize;
   }
 
