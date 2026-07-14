@@ -193,6 +193,8 @@ public final class Hasher {
                 }
                 else if (result.type == ChunkResultType.SUCCESS) {
                     redirectCount = 0;
+                    currentUrl = item.url;
+                    currentHeaders = extraHeaders;
                     offset += result.bytesRead;
                     if (totalSize < 0 && result.totalSize > 0) {
                         totalSize = result.totalSize;
