@@ -24,6 +24,7 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -48,13 +49,17 @@ public final class Hasher {
     private static final int CHUNK_SIZE = _64_KB;
     private static final ResourceBundle messages = ResourceBundle.getBundle("MessageBundle");
 
-    private static final String CHUNK_SIZE_PROP = "nl.knaw.dans.bagit.hash.chunkSize";
-    private static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
-    private static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
+    public static final String CHUNK_SIZE_PROP = "nl.knaw.dans.bagit.hash.chunkSize";
+    public static final String MAX_RETRIES_PROP = "nl.knaw.dans.bagit.hash.maxRetries";
+    public static final String RETRY_SLEEP_MS_PROP = "nl.knaw.dans.bagit.hash.retrySleepMs";
+    public static final String MAX_REDIRECTS_PROP = "nl.knaw.dans.bagit.hash.maxRedirects";
+    public static final String FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL_PROP = "nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail";
 
-    private static final long DEFAULT_CHUNK_SIZE = 1024L * 1024L * 1024L; // 1 GiB
+    private static final int DEFAULT_CHUNK_SIZE = 1024 * 1024 * 128; // 128 MB
     private static final int DEFAULT_MAX_RETRIES = 5;
     private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
+    private static final int DEFAULT_MAX_REDIRECTS = 20;
+    private static final boolean DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL = false;
 
     private Hasher() {
         //intentionally left empty
@@ -87,26 +92,43 @@ public final class Hasher {
     }
 
     /**
-     * Create a HEX formatted string checksum hash of the data from the {@link FetchItem}
+     * Create a HEX-formatted string checksum hash of the data from the {@link FetchItem}
      *
      * @param item          the {@link FetchItem} to hash
      * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
      * @param extraHeaders  optional extra headers to send with the request
-     * @return the hash as a hex formatted string
+     * @return the hash as a hex-formatted string
      * @throws IOException if there is a problem reading from the URL
      */
     public static String hash(final FetchItem item, final MessageDigest messageDigest, final Map<String, String> extraHeaders) throws IOException {
+        return hash(item, messageDigest, extraHeaders, HashOptions.systemProperties());
+    }
+
+    /**
+     * Create a HEX-formatted string checksum hash of the data from the {@link FetchItem}
+     *
+     * @param item          the {@link FetchItem} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @param hashOptions   optional settings for ranged HTTP requests
+     * @return the hash as a hex-formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final FetchItem item, final MessageDigest messageDigest, final Map<String, String> extraHeaders, final HashOptions hashOptions) throws IOException {
         long totalSize = (item.length != null && item.length >= 0) ? item.length : -1;
         URL currentUrl = item.url;
         Map<String, String> currentHeaders = extraHeaders;
 
         if (!currentUrl.getProtocol().startsWith("http")) {
-            return hashFullStream(currentUrl, messageDigest, currentHeaders);
+            return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);
         }
 
-        long chunkSize = Long.getLong(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE);
-        int maxRetries = Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES);
-        int retrySleepMs = Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS);
+        HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;
+        long chunkSize = effectiveOptions.getChunkSize();
+        int maxRetries = effectiveOptions.getMaxRetries();
+        int retrySleepMs = effectiveOptions.getRetrySleepMs();
+        int maxRedirects = effectiveOptions.getMaxRedirects();
+        int redirectCount = 0;
 
         long offset = 0;
         while (totalSize < 0 || offset < totalSize) {
@@ -115,6 +137,7 @@ public final class Hasher {
 
             final URL finalUrl = currentUrl;
             final Map<String, String> finalHeaders = currentHeaders;
+            final long finalOffset = offset;
             final long finalTotalSize = totalSize;
 
             try {
@@ -128,12 +151,19 @@ public final class Hasher {
                     }
 
                     if (code == 206) {
-                        return handlePartialContent(conn, messageDigest, finalTotalSize);
+                        return handlePartialContent(conn, messageDigest, finalTotalSize, range);
                     }
                     else if (code == 200) {
-                        logger.info("Server returned 200 OK for range request (probably range requests are not supported); downloading full stream from {}", finalUrl);
+                        if (finalOffset > 0) {
+                            throw new ProtocolException("Server returned 200 OK for range request " + range + " from " + finalUrl);
+                        }
+                        logger.info("Server returned 200 OK for first range request (probably range requests are not supported); downloading full stream from {}", finalUrl);
+                        messageDigest.reset(); // Reset in case we got here after a retry
                         try (InputStream is = conn.getInputStream()) {
-                            updateDigestFromStream(is, messageDigest);
+                            long totalRead = updateDigestFromStream(is, messageDigest);
+                            if (finalTotalSize >= 0 && totalRead != finalTotalSize) {
+                                throw new IOException("Expected to read " + finalTotalSize + " bytes but read " + totalRead + " bytes from " + finalUrl);
+                            }
                         }
                         return ChunkResult.fullStream(formatMessageDigest(messageDigest));
                     }
@@ -145,10 +175,14 @@ public final class Hasher {
                 logger.debug("Processing chunk result for range {} from {}", range, currentUrl);
 
                 if (result.type == ChunkResultType.FULL_STREAM_SUCCESS) {
+                    redirectCount = 0;
                     logger.debug("Successfully processed full stream for range {} from {}", range, currentUrl);
                     return result.hash;
                 }
                 else if (result.type == ChunkResultType.REDIRECT) {
+                    if (++redirectCount > maxRedirects) {
+                        throw new ProtocolException("Too many redirects");
+                    }
                     URL nextUrl = new URL(currentUrl, result.location);
                     if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
                         currentHeaders = null;
@@ -158,6 +192,9 @@ public final class Hasher {
                     // Skip offset update and retry the current chunk with new URL
                 }
                 else if (result.type == ChunkResultType.SUCCESS) {
+                    redirectCount = 0;
+                    currentUrl = item.url;
+                    currentHeaders = extraHeaders;
                     offset += result.bytesRead;
                     if (totalSize < 0 && result.totalSize > 0) {
                         totalSize = result.totalSize;
@@ -166,49 +203,90 @@ public final class Hasher {
                     logger.debug("Read {} of {}{}", offset, totalSize > 0 ? totalSize : "Unknown", totalSize > 0 ? " (" + (offset * 100L / totalSize) + "%)" : "");
                 }
             }
+            catch (ProtocolException e) {
+                throw e;
+            }
             catch (IOException e) {
-                logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
-                messageDigest.reset();
-                return hashFullStream(currentUrl, messageDigest, currentHeaders);
+                if (effectiveOptions.isFallBackToFullStreamOnRangeFail()) {
+                    logger.info("Falling back to full stream for {} after failed range requests", currentUrl);
+                    messageDigest.reset();
+                    return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);
+                }
+                else {
+                    logger.error("Failed range requests for {}, and fallback to full stream is disabled", currentUrl);
+                    throw e;
+                }
             }
         }
 
         return formatMessageDigest(messageDigest);
     }
 
-    private static String hashFullStream(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders) throws IOException {
-        URL currentUrl = url;
-        Map<String, String> currentHeaders = extraHeaders;
+    private static String hashFullStream(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders, final HashOptions hashOptions) throws IOException {
+        HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;
+        int maxRetries = effectiveOptions.getMaxRetries();
+        int retrySleepMs = effectiveOptions.getRetrySleepMs();
+        int maxRedirects = effectiveOptions.getMaxRedirects();
 
-        while (true) {
-            URLConnection conn = currentUrl.openConnection();
-            if (conn instanceof HttpURLConnection httpConn) {
-                httpConn.setInstanceFollowRedirects(false);
-                if (currentHeaders != null) {
-                    for (Entry<String, String> entry : currentHeaders.entrySet()) {
-                        httpConn.setRequestProperty(entry.getKey(), entry.getValue());
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            URL currentUrl = url;
+            Map<String, String> currentHeaders = extraHeaders;
+            try {
+                int redirectCount = 0;
+                while (true) {
+                    URLConnection conn = currentUrl.openConnection();
+                    if (conn instanceof HttpURLConnection httpConn) {
+                        httpConn.setInstanceFollowRedirects(false);
+                        if (currentHeaders != null) {
+                            for (Entry<String, String> entry : currentHeaders.entrySet()) {
+                                httpConn.setRequestProperty(entry.getKey(), entry.getValue());
+                            }
+                        }
+                        int code = httpConn.getResponseCode();
+                        if (code >= 300 && code < 400) {
+                            if (++redirectCount > maxRedirects) {
+                                throw new ProtocolException("Too many redirects");
+                            }
+                            String location = httpConn.getHeaderField("Location");
+                            URL nextUrl = new URL(currentUrl, location);
+                            if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
+                                currentHeaders = null;
+                            }
+                            currentUrl = nextUrl;
+                            continue;
+                        }
+                        if (code != 200) {
+                            throw new IOException("Unexpected response code " + code + " for " + currentUrl);
+                        }
+                    }
+                    try (final InputStream is = conn.getInputStream()) {
+                        updateDigestFromStream(is, messageDigest);
+                    }
+                    break;
+                }
+                return formatMessageDigest(messageDigest);
+            }
+            catch (ProtocolException e) {
+                throw e;
+            }
+            catch (IOException e) {
+                logger.warn("Error fetching full stream from {} (attempt {}/{}): {}", url, attempt + 1, maxRetries, e.getMessage());
+                messageDigest.reset();
+                if (attempt < maxRetries - 1) {
+                    try {
+                        Thread.sleep(retrySleepMs);
+                    }
+                    catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Interrupted during retry sleep", ie);
                     }
                 }
-                int code = httpConn.getResponseCode();
-                if (code >= 300 && code < 400) {
-                    String location = httpConn.getHeaderField("Location");
-                    URL nextUrl = new URL(currentUrl, location);
-                    if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {
-                        currentHeaders = null;
-                    }
-                    currentUrl = nextUrl;
-                    continue;
-                }
-                if (code != 200) {
-                    throw new IOException("Unexpected response code " + code + " for " + currentUrl);
+                else {
+                    throw e;
                 }
             }
-            try (final InputStream is = conn.getInputStream()) {
-                updateDigestFromStream(is, messageDigest);
-            }
-            break;
         }
-        return formatMessageDigest(messageDigest);
+        throw new IOException("Max retries exceeded");
     }
 
     /**
@@ -224,7 +302,21 @@ public final class Hasher {
         return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders);
     }
 
-    private static ChunkResult handlePartialContent(HttpURLConnection conn, MessageDigest messageDigest, long currentTotalSize) throws IOException {
+    /**
+     * Create a HEX formatted string checksum hash of the data from the URL
+     *
+     * @param url           the {@link URL} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @param hashOptions   optional settings for ranged HTTP requests
+     * @return the hash as a hex formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final URL url, final MessageDigest messageDigest, final Map<String, String> extraHeaders, final HashOptions hashOptions) throws IOException {
+        return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders, hashOptions);
+    }
+
+    private static ChunkResult handlePartialContent(HttpURLConnection conn, MessageDigest messageDigest, long currentTotalSize, String range) throws IOException {
         long totalSize = currentTotalSize;
         if (totalSize < 0) {
             String contentRange = conn.getHeaderField("Content-Range");
@@ -238,22 +330,24 @@ public final class Hasher {
             }
         }
         try (InputStream is = conn.getInputStream()) {
-            int bytesRead = updateDigestFromStream(is, messageDigest);
-            if (bytesRead < 0) {
-                throw new IOException("Stream closed unexpectedly for " + conn.getURL());
+            byte[] bytes = is.readAllBytes();
+            if (bytes.length == 0) {
+                // N.B. getting the range from the connection at this point may throw an exception, so we use the range we already have.
+                throw new IOException("Received empty response for range request " + range + " from " + conn.getURL());
             }
-            return ChunkResult.success(bytesRead, totalSize);
+            messageDigest.update(bytes);
+            logger.debug("Updated message digest with range {}", range);
+            return ChunkResult.success(bytes.length, totalSize);
         }
     }
 
     private static ChunkResult executeWithRetry(RetryableOperation<ChunkResult> operation, String description, int maxRetries, int retrySleepMs) throws IOException {
         for (int attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                ChunkResult result = operation.execute();
-                if (result.type == ChunkResultType.REDIRECT) {
-                    return result; // Break the retry loop for redirects
-                }
-                return result;
+                return operation.execute();
+            }
+            catch (ProtocolException e) {
+                throw e;
             }
             catch (IOException e) {
                 logger.warn("{} (attempt {}/{}): {}", description, attempt + 1, maxRetries, e.getMessage());
@@ -289,12 +383,12 @@ public final class Hasher {
      */
     private static class ChunkResult {
         final ChunkResultType type;
-        final int bytesRead;
+        final long bytesRead;
         final long totalSize;
         final String location;
         final String hash;
 
-        private ChunkResult(ChunkResultType type, int bytesRead, long totalSize, String location, String hash) {
+        private ChunkResult(ChunkResultType type, long bytesRead, long totalSize, String location, String hash) {
             this.type = type;
             this.bytesRead = bytesRead;
             this.totalSize = totalSize;
@@ -302,7 +396,7 @@ public final class Hasher {
             this.hash = hash;
         }
 
-        static ChunkResult success(int bytesRead, long totalSize) {
+        static ChunkResult success(long bytesRead, long totalSize) {
             return new ChunkResult(ChunkResultType.SUCCESS, bytesRead, totalSize, null, null);
         }
 
@@ -335,9 +429,9 @@ public final class Hasher {
     /**
      * Reads from the InputStream and updates the MessageDigest. Returns the number of bytes read.
      */
-    private static int updateDigestFromStream(InputStream is, MessageDigest messageDigest) throws IOException {
+    private static long updateDigestFromStream(InputStream is, MessageDigest messageDigest) throws IOException {
         byte[] buffer = new byte[CHUNK_SIZE];
-        int totalRead = 0;
+        long totalRead = 0;
         int read = is.read(buffer);
         while (read != -1) {
             messageDigest.update(buffer, 0, read);
@@ -410,5 +504,120 @@ public final class Hasher {
         }
 
         return map;
+    }
+
+    /**
+     * Represents configuration options for hashing operations. This class is immutable and provides various configurable parameters such as chunk size, retry behavior, and redirection limits.
+     */
+    public static final class HashOptions {
+        private final int chunkSize;
+        private final int maxRetries;
+        private final int retrySleepMs;
+        private final int maxRedirects;
+        private final boolean fallBackToFullStreamOnRangeFail;
+
+        /**
+         * Constructs an instance of {@code HashOptions} with specific configuration settings for chunk size, retry behavior, and redirection limits.
+         *
+         * @param chunkSize    the size of data chunks in bytes; must be greater than 0
+         * @param maxRetries   the maximum number of retry attempts; must be greater than 0
+         * @param retrySleepMs the time in milliseconds to sleep between retries
+         * @param maxRedirects the maximum number of redirects allowed; must be greater than or equal to 0
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs, final int maxRedirects, boolean fallBackToFullStreamOnRangeFail) {
+            if (chunkSize <= 0) {
+                throw new IllegalArgumentException("chunkSize must be greater than 0");
+            }
+            if (maxRetries <= 0) {
+                throw new IllegalArgumentException("maxRetries must be greater than 0");
+            }
+            if (maxRedirects < 0) {
+                throw new IllegalArgumentException("maxRedirects must be greater than or equal to 0");
+            }
+            this.chunkSize = chunkSize;
+            this.maxRetries = maxRetries;
+            this.retrySleepMs = retrySleepMs;
+            this.maxRedirects = maxRedirects;
+            this.fallBackToFullStreamOnRangeFail = fallBackToFullStreamOnRangeFail;
+        }
+
+        /**
+         * Creates an instance of {@code HashOptions} using system properties to determine the configuration values for chunk size, maximum retries, retry sleep time, and maximum redirects. Defaults
+         * are used if the respective system properties are not set.
+         *
+         * The following system properties are used: - {@code CHUNK_SIZE_PROP}: Configures the chunk size in bytes (default: {@code DEFAULT_CHUNK_SIZE}). - {@code MAX_RETRIES_PROP}: Configures the
+         * maximum number of retry attempts (default: {@code DEFAULT_MAX_RETRIES}). - {@code RETRY_SLEEP_MS_PROP}: Configures the sleep time in milliseconds between retries (default:
+         * {@code DEFAULT_RETRY_SLEEP_MS}). - {@code MAX_REDIRECTS_PROP}: Configures the maximum allowable redirects (default: {@code DEFAULT_MAX_REDIRECTS}).
+         *
+         * @return a {@code HashOptions} instance populated with configuration values derived from system properties or their default values.
+         * @throws IllegalArgumentException if any of the retrieved values are invalid (e.g., negative or zero where not allowed)
+         */
+        public static HashOptions systemProperties() {
+            return new HashOptions(
+                Integer.getInteger(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),
+                Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES),
+                Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS),
+                Integer.getInteger(MAX_REDIRECTS_PROP, DEFAULT_MAX_REDIRECTS),
+                Boolean.parseBoolean(System.getProperty(FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL_PROP, String.valueOf(DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL)))
+            );
+        }
+
+        /**
+         * Returns a new {@code HashOptions} instance with the specified overrides for configuration parameters. If a parameter is {@code null}, the existing value from the current {@code HashOptions}
+         * instance is used.
+         *
+         * @param chunkSize    the size of data chunks in bytes; if {@code null}, the existing chunk size is retained
+         * @param maxRetries   the maximum number of retry attempts; if {@code null}, the existing max retries value is retained
+         * @param retrySleepMs the time in milliseconds to sleep between retries; if {@code null}, the existing retry sleep time is retained
+         * @param maxRedirects the maximum number of redirects allowed; if {@code null}, the existing max redirects value is retained
+         * @return a new {@code HashOptions} instance with the specified values or the existing values if overrides are {@code null}
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects) {
+            return withOverrides(chunkSize, maxRetries, retrySleepMs, maxRedirects, null);
+        }
+
+        /**
+         * Returns a new {@code HashOptions} instance with the specified overrides for configuration parameters. If a parameter is {@code null}, the existing value from the current {@code HashOptions}
+         * instance is used.
+         *
+         * @param chunkSize    the size of data chunks in bytes; if {@code null}, the existing chunk size is retained
+         * @param maxRetries   the maximum number of retry attempts; if {@code null}, the existing max retries value is retained
+         * @param retrySleepMs the time in milliseconds to sleep between retries; if {@code null}, the existing retry sleep time is retained
+         * @param maxRedirects the maximum number of redirects allowed; if {@code null}, the existing max redirects value is retained
+         * @param fallBackToFullStreamOnRangeFail whether to fall back to full stream; if {@code null}, the existing value is retained
+         * @return a new {@code HashOptions} instance with the specified values or the existing values if overrides are {@code null}
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects, final Boolean fallBackToFullStreamOnRangeFail) {
+            return new HashOptions(
+                chunkSize == null ? this.chunkSize : chunkSize,
+                maxRetries == null ? this.maxRetries : maxRetries,
+                retrySleepMs == null ? this.retrySleepMs : retrySleepMs,
+                maxRedirects == null ? this.maxRedirects : maxRedirects,
+                fallBackToFullStreamOnRangeFail == null ? this.fallBackToFullStreamOnRangeFail : fallBackToFullStreamOnRangeFail
+            );
+        }
+
+        public int getChunkSize() {
+            return chunkSize;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public int getRetrySleepMs() {
+            return retrySleepMs;
+        }
+
+        public int getMaxRedirects() {
+            return maxRedirects;
+        }
+
+        public boolean isFallBackToFullStreamOnRangeFail() {
+            return fallBackToFullStreamOnRangeFail;
+        }
     }
 }

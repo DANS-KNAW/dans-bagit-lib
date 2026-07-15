@@ -120,12 +120,8 @@ public class BagVerifierRemoteTest extends TempFolderTest {
         headers.put(authHeaderName, authHeaderValue);
         
         // Use a small chunk size to force multiple range requests
-        System.setProperty("nl.knaw.dans.bagit.hash.chunkSize", "10");
-        try {
-            sut.isValid(bag, true, true, headers);
-        } finally {
-            System.clearProperty("nl.knaw.dans.bagit.hash.chunkSize");
-        }
+        sut.setChunkSize(10);
+        sut.isValid(bag, true, true, headers);
 
         Assertions.assertTrue(rangeRequestCount.get() > 1, "Should have used multiple range requests, but used: " + rangeRequestCount.get());
     }

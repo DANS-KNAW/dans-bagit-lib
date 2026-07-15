@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -89,6 +90,7 @@ public class HasherUrlTest {
         System.clearProperty("nl.knaw.dans.bagit.hash.chunkSize");
         System.clearProperty("nl.knaw.dans.bagit.hash.maxRetries");
         System.clearProperty("nl.knaw.dans.bagit.hash.retrySleepMs");
+        System.clearProperty("nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail");
     }
 
     @Test
@@ -208,6 +210,45 @@ public class HasherUrlTest {
     }
 
     @Test
+    public void testHashThrowsProtocolExceptionWhenLaterChunkReturnsOk() throws IOException, NoSuchAlgorithmException {
+        server.removeContext("/test");
+        server.createContext("/test", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws IOException {
+                int count = requestCount.incrementAndGet();
+                String range = exchange.getRequestHeaders().getFirst("Range");
+                if (count == 2) {
+                    exchange.sendResponseHeaders(200, TEST_DATA_BYTES.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(TEST_DATA_BYTES);
+                    }
+                    return;
+                }
+
+                String[] parts = range.substring(6).split("-");
+                int start = Integer.parseInt(parts[0]);
+                int end = parts.length > 1 && !parts[1].isEmpty() ? Integer.parseInt(parts[1]) : TEST_DATA_BYTES.length - 1;
+                int actualEnd = Math.min(end, TEST_DATA_BYTES.length - 1);
+                int length = actualEnd - start + 1;
+                exchange.getResponseHeaders().set("Content-Range", "bytes " + start + "-" + actualEnd + "/" + TEST_DATA_BYTES.length);
+                exchange.sendResponseHeaders(206, length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(TEST_DATA_BYTES, start, length);
+                }
+            }
+        });
+
+        System.setProperty("nl.knaw.dans.bagit.hash.chunkSize", "10");
+        System.setProperty("nl.knaw.dans.bagit.hash.maxRetries", "3");
+
+        URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/test");
+        MessageDigest md = MessageDigest.getInstance("SHA-1");
+
+        Assertions.assertThrows(ProtocolException.class, () -> Hasher.hash(url, md));
+        Assertions.assertEquals(2, requestCount.get());
+    }
+
+    @Test
     public void testHashWithFailedFirstRangeRequest() throws IOException, NoSuchAlgorithmException {
         server.removeContext("/test");
         server.createContext("/test", new HttpHandler() {
@@ -228,6 +269,7 @@ public class HasherUrlTest {
         });
 
         System.setProperty("nl.knaw.dans.bagit.hash.maxRetries", "1");
+        System.setProperty("nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail", "true");
         try {
             URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/test");
             MessageDigest md = MessageDigest.getInstance("SHA-1");
@@ -248,6 +290,7 @@ public class HasherUrlTest {
             Assertions.assertEquals(2, requestCount.get());
         } finally {
             System.clearProperty("nl.knaw.dans.bagit.hash.maxRetries");
+            System.clearProperty("nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail");
         }
     }
 

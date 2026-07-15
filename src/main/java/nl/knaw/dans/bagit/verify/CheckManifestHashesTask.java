@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ResourceBundle;
@@ -33,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import nl.knaw.dans.bagit.hash.Hasher;
+import nl.knaw.dans.bagit.hash.Hasher.HashOptions;
 
 /**
  * Checks a give file to make sure the given checksum hash matches the computed checksum hash.
@@ -51,20 +53,25 @@ public class CheckManifestHashesTask implements Runnable {
   private transient final boolean holey;
   private transient final Map<String, String> extraHeaders;
   private transient final Map<String, Map<String, String>> urlConfigs;
+  private transient final HashOptions hashOptions;
 
   public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions) {
-    this(entry, algorithm, latch, exceptions, null, false, null, null);
+    this(entry, algorithm, latch, exceptions, null, false, null, null, null);
   }
 
   public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions, final Map<Path, FetchItem> fetchItems, final boolean holey) {
-    this(entry, algorithm, latch, exceptions, fetchItems, holey, null, null);
+    this(entry, algorithm, latch, exceptions, fetchItems, holey, null, null, null);
   }
 
   public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions, final Map<Path, FetchItem> fetchItems, final boolean holey, final Map<String, String> extraHeaders) {
-    this(entry, algorithm, latch, exceptions, fetchItems, holey, extraHeaders, null);
+    this(entry, algorithm, latch, exceptions, fetchItems, holey, extraHeaders, null, null);
   }
 
   public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions, final Map<Path, FetchItem> fetchItems, final boolean holey, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs) {
+    this(entry, algorithm, latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs, null);
+  }
+
+  public CheckManifestHashesTask(final Entry<Path, String> entry, final String algorithm, final CountDownLatch latch, final Collection<Exception> exceptions, final Map<Path, FetchItem> fetchItems, final boolean holey, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs, final HashOptions hashOptions) {
     this.entry = entry;
     this.algorithm = algorithm;
     this.latch = latch;
@@ -73,13 +80,14 @@ public class CheckManifestHashesTask implements Runnable {
     this.holey = holey;
     this.extraHeaders = extraHeaders;
     this.urlConfigs = urlConfigs;
+    this.hashOptions = hashOptions;
   }
 
   @Override
   public void run() {
     try {
       final MessageDigest messageDigest = MessageDigest.getInstance(algorithm);
-      checkManifestEntry(entry, messageDigest, algorithm, fetchItems, holey, extraHeaders, urlConfigs);
+      checkManifestEntry(entry, messageDigest, algorithm, fetchItems, holey, extraHeaders, urlConfigs, hashOptions);
     } catch (IOException | CorruptChecksumException | NoSuchAlgorithmException e) {
       exceptions.add(e);
     }
@@ -87,18 +95,22 @@ public class CheckManifestHashesTask implements Runnable {
   }
 
   protected static void checkManifestEntry(final Entry<Path, String> entry, final MessageDigest messageDigest, final String algorithm) throws IOException, CorruptChecksumException {
-    checkManifestEntry(entry, messageDigest, algorithm, null, false, null, null);
+    checkManifestEntry(entry, messageDigest, algorithm, null, false, null, null, null);
   }
 
   protected static void checkManifestEntry(final Entry<Path, String> entry, final MessageDigest messageDigest, final String algorithm, final Map<Path, FetchItem> fetchItems, final boolean allowHoley) throws IOException, CorruptChecksumException {
-    checkManifestEntry(entry, messageDigest, algorithm, fetchItems, allowHoley, null, null);
+    checkManifestEntry(entry, messageDigest, algorithm, fetchItems, allowHoley, null, null, null);
   }
 
   protected static void checkManifestEntry(final Entry<Path, String> entry, final MessageDigest messageDigest, final String algorithm, final Map<Path, FetchItem> fetchItems, final boolean allowHoley, final Map<String, String> extraHeaders) throws IOException, CorruptChecksumException {
-    checkManifestEntry(entry, messageDigest, algorithm, fetchItems, allowHoley, extraHeaders, null);
+    checkManifestEntry(entry, messageDigest, algorithm, fetchItems, allowHoley, extraHeaders, null, null);
   }
 
   protected static void checkManifestEntry(final Entry<Path, String> entry, final MessageDigest messageDigest, final String algorithm, final Map<Path, FetchItem> fetchItems, final boolean allowHoley, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs) throws IOException, CorruptChecksumException {
+    checkManifestEntry(entry, messageDigest, algorithm, fetchItems, allowHoley, extraHeaders, urlConfigs, null);
+  }
+
+  protected static void checkManifestEntry(final Entry<Path, String> entry, final MessageDigest messageDigest, final String algorithm, final Map<Path, FetchItem> fetchItems, final boolean allowHoley, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs, final HashOptions hashOptions) throws IOException, CorruptChecksumException {
     if (Files.exists(entry.getKey())) {
       logger.debug(messages.getString("checking_checksums"), entry.getKey(), entry.getValue());
       final String hash = Hasher.hash(entry.getKey(), messageDigest);
@@ -110,7 +122,7 @@ public class CheckManifestHashesTask implements Runnable {
       final FetchItem item = fetchItems.get(entry.getKey());
       logger.debug("File {} does not exist, but it is in fetch.txt, and allowHoley is true. Hashing from URL: {}", entry.getKey(), item.url);
       final Map<String, String> mergedHeaders = mergeHeaders(item.url, extraHeaders, urlConfigs);
-      final String hash = Hasher.hash(item, messageDigest, mergedHeaders);
+      final String hash = Hasher.hash(item, messageDigest, mergedHeaders, hashOptions);
       logger.debug("computed hash [{}] for url [{}]", hash, item.url);
       if (!hash.equals(entry.getValue())) {
         throw new CorruptChecksumException(messages.getString("corrupt_checksum_error"), entry.getKey(), algorithm, entry.getValue(), hash);
@@ -124,7 +136,7 @@ public class CheckManifestHashesTask implements Runnable {
       return extraHeaders;
     }
 
-    final Map<String, String> mergedHeaders = new java.util.HashMap<>();
+    final Map<String, String> mergedHeaders = new HashMap<>();
     if (extraHeaders != null) {
       mergedHeaders.putAll(extraHeaders);
     }
