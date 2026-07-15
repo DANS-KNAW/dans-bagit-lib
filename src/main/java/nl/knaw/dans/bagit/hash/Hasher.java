@@ -59,7 +59,7 @@ public final class Hasher {
     private static final int DEFAULT_MAX_RETRIES = 5;
     private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
     private static final int DEFAULT_MAX_REDIRECTS = 20;
-    private static final boolean DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL = true;
+    private static final boolean DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL = false;
 
     private Hasher() {
         //intentionally left empty
@@ -336,7 +336,7 @@ public final class Hasher {
                 throw new IOException("Received empty response for range request " + range + " from " + conn.getURL());
             }
             messageDigest.update(bytes);
-            logger.debug("Updated message digest with range " + range);
+            logger.debug("Updated message digest with range {}", range);
             return ChunkResult.success(bytes.length, totalSize);
         }
     }
@@ -530,7 +530,7 @@ public final class Hasher {
                 throw new IllegalArgumentException("chunkSize must be greater than 0");
             }
             if (maxRetries <= 0) {
-                throw new IllegalArgumentException("maxRetries must be greater than or equal to 0");
+                throw new IllegalArgumentException("maxRetries must be greater than 0");
             }
             if (maxRedirects < 0) {
                 throw new IllegalArgumentException("maxRedirects must be greater than or equal to 0");
