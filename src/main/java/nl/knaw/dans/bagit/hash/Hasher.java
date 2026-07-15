@@ -523,7 +523,7 @@ public final class Hasher {
          * @param maxRetries   the maximum number of retry attempts; must be greater than 0
          * @param retrySleepMs the time in milliseconds to sleep between retries
          * @param maxRedirects the maximum number of redirects allowed; must be greater than or equal to 0
-         * @throws IllegalArgumentException if {@code chunkSize} is less than or equal to 0 or if {@code maxRetries} is less than 0
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
          */
         public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs, final int maxRedirects, boolean fallBackToFullStreamOnRangeFail) {
             if (chunkSize <= 0) {

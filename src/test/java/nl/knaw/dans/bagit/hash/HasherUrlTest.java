@@ -90,6 +90,7 @@ public class HasherUrlTest {
         System.clearProperty("nl.knaw.dans.bagit.hash.chunkSize");
         System.clearProperty("nl.knaw.dans.bagit.hash.maxRetries");
         System.clearProperty("nl.knaw.dans.bagit.hash.retrySleepMs");
+        System.clearProperty("nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail");
     }
 
     @Test
@@ -268,6 +269,7 @@ public class HasherUrlTest {
         });
 
         System.setProperty("nl.knaw.dans.bagit.hash.maxRetries", "1");
+        System.setProperty("nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail", "true");
         try {
             URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/test");
             MessageDigest md = MessageDigest.getInstance("SHA-1");
@@ -288,6 +290,7 @@ public class HasherUrlTest {
             Assertions.assertEquals(2, requestCount.get());
         } finally {
             System.clearProperty("nl.knaw.dans.bagit.hash.maxRetries");
+            System.clearProperty("nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail");
         }
     }
 

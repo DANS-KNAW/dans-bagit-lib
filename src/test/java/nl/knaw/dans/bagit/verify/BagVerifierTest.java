@@ -15,27 +15,12 @@
  */
 package nl.knaw.dans.bagit.verify;
 
-import java.io.File;
-import java.net.URL;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.Security;
-import java.util.Arrays;
-import java.util.List;
-
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import nl.knaw.dans.bagit.TempFolderTest;
 import nl.knaw.dans.bagit.TestUtils;
 import nl.knaw.dans.bagit.domain.Bag;
 import nl.knaw.dans.bagit.domain.Manifest;
 import nl.knaw.dans.bagit.exceptions.CorruptChecksumException;
 import nl.knaw.dans.bagit.exceptions.FileNotInManifestException;
-import nl.knaw.dans.bagit.exceptions.FileNotInPayloadDirectoryException;
 import nl.knaw.dans.bagit.exceptions.UnsupportedAlgorithmException;
 import nl.knaw.dans.bagit.exceptions.VerificationException;
 import nl.knaw.dans.bagit.hash.Hasher;
@@ -43,263 +28,287 @@ import nl.knaw.dans.bagit.hash.Hasher.HashOptions;
 import nl.knaw.dans.bagit.hash.StandardSupportedAlgorithms;
 import nl.knaw.dans.bagit.hash.SupportedAlgorithm;
 import nl.knaw.dans.bagit.reader.BagReader;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-public class BagVerifierTest extends TempFolderTest{
-  static {
-    if (Security.getProvider("BC") == null) {
-      Security.addProvider(new BouncyCastleProvider());
+import java.io.File;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.Security;
+import java.util.Arrays;
+import java.util.List;
+
+public class BagVerifierTest extends TempFolderTest {
+    static {
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
     }
-  }
-  
-  private Path rootDir = Paths.get(new File("src/test/resources/bags/v0_97/bag").toURI());
-  
-  private BagVerifier sut = new BagVerifier();
-  private BagReader reader = new BagReader();
-  
-  @Test
-  public void testValidWhenHiddenFolderNotIncluded() throws Exception{
-	  Path copyDir = copyBagToTempFolder(rootDir);
-	  Files.createDirectory(copyDir.resolve("data").resolve(".someHiddenFolder"));
-	  TestUtils.makeFilesHiddenOnWindows(copyDir);
-	  
-	  Bag bag = reader.read(copyDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testValidWithHiddenFile() throws Exception{
-	  Path copyDir = copyBagToTempFolder(rootDir);
-	  Files.createFile(copyDir.resolve("data").resolve(".someHiddenFile"));
-	  TestUtils.makeFilesHiddenOnWindows(copyDir);
-	  
-	  Bag bag = reader.read(copyDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testInvalidWithHiddenFile() throws Exception{
-	  Path copyDir = copyBagToTempFolder(rootDir);
-	  Files.createFile(copyDir.resolve("data").resolve(".someHiddenFile"));
-	  TestUtils.makeFilesHiddenOnWindows(copyDir);
-	  
-	  Bag bag = reader.read(copyDir);
-	  Assertions.assertThrows(FileNotInManifestException.class, () -> { sut.isValid(bag, false); });
-  }
-  
-  @Test
-  public void testStandardSupportedAlgorithms() throws Exception{
-    List<String> algorithms = Arrays.asList("md5", "sha1", "sha256", "sha512");
-    for(String alg : algorithms){
-      StandardSupportedAlgorithms algorithm = StandardSupportedAlgorithms.valueOf(alg.toUpperCase());
-      Manifest manifest = new Manifest(algorithm);
-      sut.checkHashes(manifest);
+
+    private Path rootDir = Paths.get(new File("src/test/resources/bags/v0_97/bag").toURI());
+
+    private final BagVerifier sut = new BagVerifier();
+    private final BagReader reader = new BagReader();
+
+    @Test
+    public void testValidWhenHiddenFolderNotIncluded() throws Exception {
+        Path copyDir = copyBagToTempFolder(rootDir);
+        Files.createDirectory(copyDir.resolve("data").resolve(".someHiddenFolder"));
+        TestUtils.makeFilesHiddenOnWindows(copyDir);
+
+        Bag bag = reader.read(copyDir);
+        sut.isValid(bag, true);
     }
-  }
 
-  @Test
-  public void hash_options_on_bag_verifier_override_system_properties() {
-    System.setProperty(Hasher.CHUNK_SIZE_PROP, "10");
-    System.setProperty(Hasher.MAX_RETRIES_PROP, "2");
-    System.setProperty(Hasher.RETRY_SLEEP_MS_PROP, "30");
-    try {
-      HashOptions systemHashOptions = sut.getHashOptions();
+    @Test
+    public void testValidWithHiddenFile() throws Exception {
+        Path copyDir = copyBagToTempFolder(rootDir);
+        Files.createFile(copyDir.resolve("data").resolve(".someHiddenFile"));
+        TestUtils.makeFilesHiddenOnWindows(copyDir);
 
-      Assertions.assertEquals(10, systemHashOptions.getChunkSize());
-      Assertions.assertEquals(2, systemHashOptions.getMaxRetries());
-      Assertions.assertEquals(30, systemHashOptions.getRetrySleepMs());
-
-      sut.setChunkSize(20);
-      sut.setMaxRetries(3);
-      sut.setRetrySleepMs(40);
-
-      HashOptions hashOptions = sut.getHashOptions();
-
-      Assertions.assertEquals(20, hashOptions.getChunkSize());
-      Assertions.assertEquals(3, hashOptions.getMaxRetries());
-      Assertions.assertEquals(40, hashOptions.getRetrySleepMs());
+        Bag bag = reader.read(copyDir);
+        sut.isValid(bag, true);
     }
-    finally {
-      System.clearProperty(Hasher.CHUNK_SIZE_PROP);
-      System.clearProperty(Hasher.MAX_RETRIES_PROP);
-      System.clearProperty(Hasher.RETRY_SLEEP_MS_PROP);
+
+    @Test
+    public void testInvalidWithHiddenFile() throws Exception {
+        Path copyDir = copyBagToTempFolder(rootDir);
+        Files.createFile(copyDir.resolve("data").resolve(".someHiddenFile"));
+        TestUtils.makeFilesHiddenOnWindows(copyDir);
+
+        Bag bag = reader.read(copyDir);
+        Assertions.assertThrows(FileNotInManifestException.class, () -> {
+            sut.isValid(bag, false);
+        });
     }
-  }
-  
-  @Test
-  public void testMD5Bag() throws Exception{
-	  Path bagDir = Paths.get("src", "test", "resources", "md5Bag");
-	  Bag bag = reader.read(bagDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testSHA1Bag() throws Exception{
-	  Path bagDir = Paths.get("src", "test", "resources", "sha1Bag");
-	  Bag bag = reader.read(bagDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testSHA224Bag() throws Exception{
-	  Path bagDir = Paths.get("src", "test", "resources", "sha224Bag");
-	  Bag bag = reader.read(bagDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testSHA256Bag() throws Exception{
-	  Path bagDir = Paths.get("src", "test", "resources", "sha256Bag");
-	  Bag bag = reader.read(bagDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testSHA512Bag() throws Exception{
-	  Path bagDir = Paths.get("src", "test", "resources", "sha512Bag");
-	  Bag bag = reader.read(bagDir);
-	  sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testVersion0_97IsValid() throws Exception{
-    Bag bag = reader.read(rootDir);
-    
-    sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testVersion2_0IsValid() throws Exception{
-    rootDir = Paths.get(new File("src/test/resources/bags/v2_0/bag").toURI());
-    Bag bag = reader.read(rootDir);
-    
-    sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testIsComplete() throws Exception{
-    Bag bag = reader.read(rootDir);
-    
-    sut.isComplete(bag, true);
-  }
-  
-  @Test
-  public void testCorruptPayloadFile() throws Exception{
-    rootDir = Paths.get(new File("src/test/resources/corruptPayloadFile").toURI());
-    Bag bag = reader.read(rootDir);
-    
-    Assertions.assertThrows(CorruptChecksumException.class, () -> { sut.isValid(bag, true); });
-  }
-  
-  @Test
-  public void testCorruptTagFile() throws Exception{
-    rootDir = Paths.get(new File("src/test/resources/corruptTagFile").toURI());
-    Bag bag = reader.read(rootDir);
-    
-    Assertions.assertThrows(CorruptChecksumException.class, () -> { sut.isValid(bag, true); });
-  }
-  
-  @Test
-  public void testErrorWhenUnspportedAlgorithmException() throws Exception{
-    Path sha3BagDir = Paths.get(getClass().getClassLoader().getResource("sha3Bag").toURI());
-    MySupportedNameToAlgorithmMapping mapping = new MySupportedNameToAlgorithmMapping();
-    BagReader extendedReader = new BagReader(mapping);
-    Bag bag = extendedReader.read(sha3BagDir);
-    
-    Assertions.assertThrows(UnsupportedAlgorithmException.class, () -> { sut.isValid(bag, true); });
-  }
-  
-  @Test
-  public void testVerificationExceptionIsThrownForNoSuchAlgorithmException() throws Exception{
-    Path unreadableFile = createFile("newFile");
-    
-    Manifest manifest = new Manifest(new SupportedAlgorithm() {
-      @Override
-      public String getMessageDigestName() {
-        return "FOO";
-      }
-      @Override
-      public String getBagitName() {
-        return "foo";
-      }
-    });
-    manifest.getFileToChecksumMap().put(unreadableFile, "foo");
-    
-    Assertions.assertThrows(VerificationException.class, () -> { sut.checkHashes(manifest); });
-  }
-  
-  @Test
-  public void testAddSHA3SupportViaExtension() throws Exception{
-    Path sha3BagDir = Paths.get(new File("src/test/resources/sha3Bag").toURI());
-    MySupportedNameToAlgorithmMapping mapping = new MySupportedNameToAlgorithmMapping();
-    BagReader extendedReader = new BagReader(mapping);
-    Bag bag = extendedReader.read(sha3BagDir);
-    try(BagVerifier extendedSut = new BagVerifier(mapping)){
-      extendedSut.isValid(bag, true);
+
+    @Test
+    public void testStandardSupportedAlgorithms() throws Exception {
+        List<String> algorithms = Arrays.asList("md5", "sha1", "sha256", "sha512");
+        for (String alg : algorithms) {
+            StandardSupportedAlgorithms algorithm = StandardSupportedAlgorithms.valueOf(alg.toUpperCase());
+            Manifest manifest = new Manifest(algorithm);
+            sut.checkHashes(manifest);
+        }
     }
-  }
-  
-  /*
-   * Technically valid but highly discouraged
-   */
-  @Test
-  public void testManifestsWithLeadingDotSlash() throws Exception{
-    Path bagPath = Paths.get(new File("src/test/resources/bag-with-leading-dot-slash-in-manifest").toURI());
-    Bag bag = reader.read(bagPath);
-    
-    sut.isValid(bag, true);
-  }
-  
-  @Test
-  public void testCanQuickVerify() throws Exception{
-    Bag bag = reader.read(rootDir);
-    boolean canQuickVerify = BagVerifier.canQuickVerify(bag);
-    Assertions.assertFalse(canQuickVerify,
-        "Since " + bag.getRootDir() + " DOES NOT contain the metadata Payload-Oxum then it should return false!");
-    
-    Path passingRootDir = Paths.get(new File("src/test/resources/bags/v0_94/bag").toURI());
-    bag = reader.read(passingRootDir);
-    canQuickVerify = BagVerifier.canQuickVerify(bag);
-    Assertions.assertTrue(canQuickVerify,
-        "Since " + bag.getRootDir() + " DOES contain the metadata Payload-Oxum then it should return true!");
-  }
-  
-  @Test 
-  public void testQuickVerify() throws Exception{
-    Path passingRootDir = Paths.get(new File("src/test/resources/bags/v0_94/bag").toURI());
-    Bag bag = reader.read(passingRootDir);
-    
-    BagVerifier.quicklyVerify(bag);
-  }
 
-  @Test
-  public void testHoleyBag() throws Exception {
-    Path bagDir = Paths.get("src", "test", "resources", "md5Bag");
-    Path copyDir = copyBagToTempFolder(bagDir);
-    Path readme = copyDir.resolve("data/readme.txt");
-    byte[] content = Files.readAllBytes(readme);
-    Files.delete(readme);
+    @Test
+    public void hash_options_on_bag_verifier_override_system_properties() {
+        System.setProperty(Hasher.CHUNK_SIZE_PROP, "10");
+        System.setProperty(Hasher.MAX_RETRIES_PROP, "2");
+        System.setProperty(Hasher.RETRY_SLEEP_MS_PROP, "30");
+        try (BagVerifier sut = new BagVerifier()) {
+            HashOptions systemHashOptions = sut.getHashOptions();
 
-    // Create a local file to serve as "remote" resource
-    Path remoteFile = copyDir.resolve("remote-readme.txt");
-    Files.write(remoteFile, content);
-    URL remoteUrl = remoteFile.toUri().toURL();
+            Assertions.assertEquals(10, systemHashOptions.getChunkSize());
+            Assertions.assertEquals(2, systemHashOptions.getMaxRetries());
+            Assertions.assertEquals(30, systemHashOptions.getRetrySleepMs());
 
-    // Create fetch.txt
-    Path fetchFile = copyDir.resolve("fetch.txt");
-    // Format of fetch.txt: url length path
-    // IMPORTANT: BagReader uses relative paths from root for fetch items, 
-    // but they should NOT have 'data/' prefix if they are in data directory? 
-    // Actually, BagIt spec says it's the path relative to the bag root.
-    String fetchLine = remoteUrl.toString() + " " + content.length + " data/readme.txt\n";
-    Files.write(fetchFile, fetchLine.getBytes());
+            sut.setChunkSize(20);
+            sut.setMaxRetries(3);
+            sut.setRetrySleepMs(40);
 
-    Bag bag = reader.read(copyDir);
+            HashOptions hashOptions = sut.getHashOptions();
 
-    // With the new logic, it should be valid even without explicitly passing true,
-    // because fetch.txt is present and contains data/readme.txt
-    sut.isValid(bag, true);
+            Assertions.assertEquals(20, hashOptions.getChunkSize());
+            Assertions.assertEquals(3, hashOptions.getMaxRetries());
+            Assertions.assertEquals(40, hashOptions.getRetrySleepMs());
+        }
+        finally {
+            System.clearProperty(Hasher.CHUNK_SIZE_PROP);
+            System.clearProperty(Hasher.MAX_RETRIES_PROP);
+            System.clearProperty(Hasher.RETRY_SLEEP_MS_PROP);
+        }
+    }
 
-    // It should also be valid if we explicitly pass true
-    sut.isValid(bag, true, true);
-  }
+    @Test
+    public void testMD5Bag() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "md5Bag");
+        Bag bag = reader.read(bagDir);
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testSHA1Bag() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "sha1Bag");
+        Bag bag = reader.read(bagDir);
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testSHA224Bag() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "sha224Bag");
+        Bag bag = reader.read(bagDir);
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testSHA256Bag() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "sha256Bag");
+        Bag bag = reader.read(bagDir);
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testSHA512Bag() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "sha512Bag");
+        Bag bag = reader.read(bagDir);
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testVersion0_97IsValid() throws Exception {
+        Bag bag = reader.read(rootDir);
+
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testVersion2_0IsValid() throws Exception {
+        rootDir = Paths.get(new File("src/test/resources/bags/v2_0/bag").toURI());
+        Bag bag = reader.read(rootDir);
+
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testIsComplete() throws Exception {
+        Bag bag = reader.read(rootDir);
+
+        sut.isComplete(bag, true);
+    }
+
+    @Test
+    public void testCorruptPayloadFile() throws Exception {
+        rootDir = Paths.get(new File("src/test/resources/corruptPayloadFile").toURI());
+        Bag bag = reader.read(rootDir);
+
+        Assertions.assertThrows(CorruptChecksumException.class, () -> {
+            sut.isValid(bag, true);
+        });
+    }
+
+    @Test
+    public void testCorruptTagFile() throws Exception {
+        rootDir = Paths.get(new File("src/test/resources/corruptTagFile").toURI());
+        Bag bag = reader.read(rootDir);
+
+        Assertions.assertThrows(CorruptChecksumException.class, () -> {
+            sut.isValid(bag, true);
+        });
+    }
+
+    @Test
+    public void testErrorWhenUnspportedAlgorithmException() throws Exception {
+        Path sha3BagDir = Paths.get(getClass().getClassLoader().getResource("sha3Bag").toURI());
+        MySupportedNameToAlgorithmMapping mapping = new MySupportedNameToAlgorithmMapping();
+        BagReader extendedReader = new BagReader(mapping);
+        Bag bag = extendedReader.read(sha3BagDir);
+
+        Assertions.assertThrows(UnsupportedAlgorithmException.class, () -> {
+            sut.isValid(bag, true);
+        });
+    }
+
+    @Test
+    public void testVerificationExceptionIsThrownForNoSuchAlgorithmException() throws Exception {
+        Path unreadableFile = createFile("newFile");
+
+        Manifest manifest = new Manifest(new SupportedAlgorithm() {
+
+            @Override
+            public String getMessageDigestName() {
+                return "FOO";
+            }
+
+            @Override
+            public String getBagitName() {
+                return "foo";
+            }
+        });
+        manifest.getFileToChecksumMap().put(unreadableFile, "foo");
+
+        Assertions.assertThrows(VerificationException.class, () -> {
+            sut.checkHashes(manifest);
+        });
+    }
+
+    @Test
+    public void testAddSHA3SupportViaExtension() throws Exception {
+        Path sha3BagDir = Paths.get(new File("src/test/resources/sha3Bag").toURI());
+        MySupportedNameToAlgorithmMapping mapping = new MySupportedNameToAlgorithmMapping();
+        BagReader extendedReader = new BagReader(mapping);
+        Bag bag = extendedReader.read(sha3BagDir);
+        try (BagVerifier extendedSut = new BagVerifier(mapping)) {
+            extendedSut.isValid(bag, true);
+        }
+    }
+
+    /*
+     * Technically valid but highly discouraged
+     */
+    @Test
+    public void testManifestsWithLeadingDotSlash() throws Exception {
+        Path bagPath = Paths.get(new File("src/test/resources/bag-with-leading-dot-slash-in-manifest").toURI());
+        Bag bag = reader.read(bagPath);
+
+        sut.isValid(bag, true);
+    }
+
+    @Test
+    public void testCanQuickVerify() throws Exception {
+        Bag bag = reader.read(rootDir);
+        boolean canQuickVerify = BagVerifier.canQuickVerify(bag);
+        Assertions.assertFalse(canQuickVerify,
+            "Since " + bag.getRootDir() + " DOES NOT contain the metadata Payload-Oxum then it should return false!");
+
+        Path passingRootDir = Paths.get(new File("src/test/resources/bags/v0_94/bag").toURI());
+        bag = reader.read(passingRootDir);
+        canQuickVerify = BagVerifier.canQuickVerify(bag);
+        Assertions.assertTrue(canQuickVerify,
+            "Since " + bag.getRootDir() + " DOES contain the metadata Payload-Oxum then it should return true!");
+    }
+
+    @Test
+    public void testQuickVerify() throws Exception {
+        Path passingRootDir = Paths.get(new File("src/test/resources/bags/v0_94/bag").toURI());
+        Bag bag = reader.read(passingRootDir);
+
+        BagVerifier.quicklyVerify(bag);
+    }
+
+    @Test
+    public void testHoleyBag() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "md5Bag");
+        Path copyDir = copyBagToTempFolder(bagDir);
+        Path readme = copyDir.resolve("data/readme.txt");
+        byte[] content = Files.readAllBytes(readme);
+        Files.delete(readme);
+
+        // Create a local file to serve as "remote" resource
+        Path remoteFile = copyDir.resolve("remote-readme.txt");
+        Files.write(remoteFile, content);
+        URL remoteUrl = remoteFile.toUri().toURL();
+
+        // Create fetch.txt
+        Path fetchFile = copyDir.resolve("fetch.txt");
+        // Format of fetch.txt: url length path
+        // IMPORTANT: BagReader uses relative paths from root for fetch items,
+        // but they should NOT have 'data/' prefix if they are in data directory?
+        // Actually, BagIt spec says it's the path relative to the bag root.
+        String fetchLine = remoteUrl.toString() + " " + content.length + " data/readme.txt\n";
+        Files.write(fetchFile, fetchLine.getBytes());
+
+        Bag bag = reader.read(copyDir);
+
+        // With the new logic, it should be valid even without explicitly passing true,
+        // because fetch.txt is present and contains data/readme.txt
+        sut.isValid(bag, true);
+
+        // It should also be valid if we explicitly pass true
+        sut.isValid(bag, true, true);
+    }
 }
