@@ -39,7 +39,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.Security;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import nl.knaw.dans.bagit.domain.FetchItem;
 
 public class BagVerifierTest extends TempFolderTest {
     static {
@@ -310,5 +315,37 @@ public class BagVerifierTest extends TempFolderTest {
 
         // It should also be valid if we explicitly pass true
         sut.isValid(bag, true, true);
+    }
+
+    @Test
+    public void testIgnoredFetchItemsSkipped() throws Exception {
+        Path bagDir = Paths.get("src", "test", "resources", "md5Bag");
+        Path copyDir = copyBagToTempFolder(bagDir);
+        Path readme = copyDir.resolve("data/readme.txt");
+        byte[] content = Files.readAllBytes(readme);
+        Files.delete(readme);
+
+        // Create a local file to serve as "remote" resource with CORRUPT content
+        Path remoteFile = copyDir.resolve("remote-readme.txt");
+        Files.write(remoteFile, "corrupt content".getBytes());
+        URL remoteUrl = remoteFile.toUri().toURL();
+
+        Path fetchFile = copyDir.resolve("fetch.txt");
+        String fetchLine = remoteUrl.toString() + " " + content.length + " data/readme.txt\n";
+        Files.write(fetchFile, fetchLine.getBytes());
+
+        Bag bag = reader.read(copyDir);
+
+        // If we don't ignore it, it should fail due to corrupt checksum
+        Assertions.assertThrows(CorruptChecksumException.class, () -> {
+            sut.isValid(bag, true);
+        });
+
+        // Now ignore it
+        Map<SupportedAlgorithm, Collection<FetchItem>> ignored = new HashMap<>();
+        ignored.put(StandardSupportedAlgorithms.MD5, Collections.singletonList(bag.getItemsToFetch().get(0)));
+
+        // Verification should pass because the hashing is skipped
+        sut.isValid(bag, true, true, null, null, ignored);
     }
 }
