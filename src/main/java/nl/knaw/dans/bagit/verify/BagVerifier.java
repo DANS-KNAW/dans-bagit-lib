@@ -22,9 +22,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ResourceBundle;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -244,8 +246,11 @@ public final class BagVerifier implements AutoCloseable{
     final Collection<Exception> exceptions = Collections.synchronizedCollection(new ArrayList<>());
     final HashOptions hashOptions = getHashOptions();
 
+    final Collection<FetchItem> optimizedIgnoredFetchItems = ignoredFetchItems == null ? null :
+        (ignoredFetchItems instanceof Set ? ignoredFetchItems : new HashSet<>(ignoredFetchItems));
+
     for(final Entry<Path, String> entry : manifest.getFileToChecksumMap().entrySet()){
-      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs, hashOptions, ignoredFetchItems));
+      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs, hashOptions, optimizedIgnoredFetchItems));
     }
 
     latch.await();
