@@ -22,9 +22,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ResourceBundle;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,6 +49,7 @@ import nl.knaw.dans.bagit.exceptions.VerificationException;
 import nl.knaw.dans.bagit.hash.BagitAlgorithmNameToSupportedAlgorithmMapping;
 import nl.knaw.dans.bagit.hash.Hasher.HashOptions;
 import nl.knaw.dans.bagit.hash.StandardBagitAlgorithmNameToSupportedAlgorithmMapping;
+import nl.knaw.dans.bagit.hash.SupportedAlgorithm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -189,6 +192,10 @@ public final class BagVerifier implements AutoCloseable{
   }
 
   public void isValid(final Bag bag, final boolean ignoreHiddenFiles, final boolean allowHoley, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs) throws IOException, FileNotInManifestException, MissingPayloadManifestException, MissingBagitFileException, MissingPayloadDirectoryException, FileNotInPayloadDirectoryException, InterruptedException, MaliciousPathException, CorruptChecksumException, VerificationException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
+    isValid(bag, ignoreHiddenFiles, allowHoley, extraHeaders, urlConfigs, null);
+  }
+
+  public void isValid(final Bag bag, final boolean ignoreHiddenFiles, final boolean allowHoley, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs, final Map<SupportedAlgorithm, ? extends Collection<FetchItem>> ignoredFetchItems) throws IOException, FileNotInManifestException, MissingPayloadManifestException, MissingBagitFileException, MissingPayloadDirectoryException, FileNotInPayloadDirectoryException, InterruptedException, MaliciousPathException, CorruptChecksumException, VerificationException, UnsupportedAlgorithmException, InvalidBagitFileFormatException{
     logger.info(messages.getString("checking_bag_is_valid"), bag.getRootDir());
     final boolean holey = allowHoley || !bag.getItemsToFetch().isEmpty();
     isComplete(bag, ignoreHiddenFiles, holey);
@@ -202,12 +209,13 @@ public final class BagVerifier implements AutoCloseable{
 
     logger.debug(messages.getString("checking_payload_checksums"));
     for(final Manifest payloadManifest : bag.getPayLoadManifests()){
-      checkHashes(payloadManifest, fetchItems, holey, extraHeaders, urlConfigs);
+      final Collection<FetchItem> ignoredItemsForAlgorithm = ignoredFetchItems != null ? ignoredFetchItems.get(payloadManifest.getAlgorithm()) : null;
+      checkHashes(payloadManifest, fetchItems, holey, extraHeaders, urlConfigs, ignoredItemsForAlgorithm);
     }
 
     logger.debug(messages.getString("checking_tag_file_checksums"));
     for(final Manifest tagManifest : bag.getTagManifests()){
-      checkHashes(tagManifest, null, false, extraHeaders, urlConfigs);
+      checkHashes(tagManifest, null, false, extraHeaders, urlConfigs, null);
     }
   }
 
@@ -228,14 +236,21 @@ public final class BagVerifier implements AutoCloseable{
   }
 
   void checkHashes(final Manifest manifest, final Map<Path, FetchItem> fetchItems, final boolean holey, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs) throws CorruptChecksumException, InterruptedException, VerificationException{
+    checkHashes(manifest, fetchItems, holey, extraHeaders, urlConfigs, null);
+  }
+
+  void checkHashes(final Manifest manifest, final Map<Path, FetchItem> fetchItems, final boolean holey, final Map<String, String> extraHeaders, final Map<String, Map<String, String>> urlConfigs, final Collection<FetchItem> ignoredFetchItems) throws CorruptChecksumException, InterruptedException, VerificationException{
     final CountDownLatch latch = new CountDownLatch( manifest.getFileToChecksumMap().size());
 
     //TODO maybe return all of these at some point...
     final Collection<Exception> exceptions = Collections.synchronizedCollection(new ArrayList<>());
     final HashOptions hashOptions = getHashOptions();
 
+    final Collection<FetchItem> optimizedIgnoredFetchItems = ignoredFetchItems == null ? null :
+        (ignoredFetchItems instanceof Set ? ignoredFetchItems : new HashSet<>(ignoredFetchItems));
+
     for(final Entry<Path, String> entry : manifest.getFileToChecksumMap().entrySet()){
-      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs, hashOptions));
+      executor.execute(new CheckManifestHashesTask(entry, manifest.getAlgorithm().getMessageDigestName(), latch, exceptions, fetchItems, holey, extraHeaders, urlConfigs, hashOptions, optimizedIgnoredFetchItems));
     }
 
     latch.await();
