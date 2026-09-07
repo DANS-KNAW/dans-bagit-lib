@@ -27,7 +27,7 @@ pom.xml.releaseBackup
 pom.xml.tag
 pom.xml.versionsBackup
 release.properties
-site
+/site
 target/
 venv/
 docs/mvnsite/
