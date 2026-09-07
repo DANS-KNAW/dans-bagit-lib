@@ -1,0 +1,64 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="" lang="">
+<head><meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+<title>BagitWarning xref</title>
+<link type="text/css" rel="stylesheet" href="../../../../../stylesheet.css" />
+</head>
+<body>
+<div id="overview"><a href="../../../../../../apidocs/nl/knaw/dans/bagit/conformance/BagitWarning.html">View Javadoc</a></div><pre>
+<a class="jxr_linenumber" name="L1" href="#L1">1</a>   <em class="jxr_comment">/*</em>
+<a class="jxr_linenumber" name="L2" href="#L2">2</a>   <em class="jxr_comment"> * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)</em>
+<a class="jxr_linenumber" name="L3" href="#L3">3</a>   <em class="jxr_comment"> *</em>
+<a class="jxr_linenumber" name="L4" href="#L4">4</a>   <em class="jxr_comment"> * Licensed under the Apache License, Version 2.0 (the "License");</em>
+<a class="jxr_linenumber" name="L5" href="#L5">5</a>   <em class="jxr_comment"> * you may not use this file except in compliance with the License.</em>
+<a class="jxr_linenumber" name="L6" href="#L6">6</a>   <em class="jxr_comment"> * You may obtain a copy of the License at</em>
+<a class="jxr_linenumber" name="L7" href="#L7">7</a>   <em class="jxr_comment"> *</em>
+<a class="jxr_linenumber" name="L8" href="#L8">8</a>   <em class="jxr_comment"> * <a href="http://www.apache.org/licenses/LICENSE-2.0" target="alexandria_uri">http://www.apache.org/licenses/LICENSE-2.0</a></em>
+<a class="jxr_linenumber" name="L9" href="#L9">9</a>   <em class="jxr_comment"> *</em>
+<a class="jxr_linenumber" name="L10" href="#L10">10</a>  <em class="jxr_comment"> * Unless required by applicable law or agreed to in writing, software</em>
+<a class="jxr_linenumber" name="L11" href="#L11">11</a>  <em class="jxr_comment"> * distributed under the License is distributed on an "AS IS" BASIS,</em>
+<a class="jxr_linenumber" name="L12" href="#L12">12</a>  <em class="jxr_comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</em>
+<a class="jxr_linenumber" name="L13" href="#L13">13</a>  <em class="jxr_comment"> * See the License for the specific language governing permissions and</em>
+<a class="jxr_linenumber" name="L14" href="#L14">14</a>  <em class="jxr_comment"> * limitations under the License.</em>
+<a class="jxr_linenumber" name="L15" href="#L15">15</a>  <em class="jxr_comment"> */</em>
+<a class="jxr_linenumber" name="L16" href="#L16">16</a>  <strong class="jxr_keyword">package</strong> nl.knaw.dans.bagit.conformance;
+<a class="jxr_linenumber" name="L17" href="#L17">17</a>  
+<a class="jxr_linenumber" name="L18" href="#L18">18</a>  <strong class="jxr_keyword">import</strong> java.util.ResourceBundle;
+<a class="jxr_linenumber" name="L19" href="#L19">19</a>  
+<a class="jxr_linenumber" name="L20" href="#L20">20</a>  <em class="jxr_javadoccomment">/**</em>
+<a class="jxr_linenumber" name="L21" href="#L21">21</a>  <em class="jxr_javadoccomment"> * The BagIt specification is very flexible in what it allows. </em>
+<a class="jxr_linenumber" name="L22" href="#L22">22</a>  <em class="jxr_javadoccomment"> * This leads to situations where something may be technically allowed, but should be discouraged. </em>
+<a class="jxr_linenumber" name="L23" href="#L23">23</a>  <em class="jxr_javadoccomment"> * This class is for that purpose, to allow reporting of these allowed but discouraged situations to the user.</em>
+<a class="jxr_linenumber" name="L24" href="#L24">24</a>  <em class="jxr_javadoccomment"> */</em>
+<a class="jxr_linenumber" name="L25" href="#L25">25</a>  <strong class="jxr_keyword">public</strong> enum <a name="BagitWarning" href="../../../../../nl/knaw/dans/bagit/conformance/BagitWarning.html#BagitWarning">BagitWarning</a> {
+<a class="jxr_linenumber" name="L26" href="#L26">26</a>    BAG_WITHIN_A_BAG(<span class="jxr_string">"bag_within_a_bag"</span>),
+<a class="jxr_linenumber" name="L27" href="#L27">27</a>    DIFFERENT_CASE(<span class="jxr_string">"different_case"</span>),
+<a class="jxr_linenumber" name="L28" href="#L28">28</a>    DIFFERENT_NORMALIZATION(<span class="jxr_string">"different_normalization"</span>),
+<a class="jxr_linenumber" name="L29" href="#L29">29</a>    EXTRA_LINES_IN_BAGIT_FILES(<span class="jxr_string">"extra_lines_in_bagit_files"</span>),
+<a class="jxr_linenumber" name="L30" href="#L30">30</a>    LEADING_DOT_SLASH(<span class="jxr_string">"leading_dot_slash"</span>),
+<a class="jxr_linenumber" name="L31" href="#L31">31</a>    NON_STANDARD_ALGORITHM(<span class="jxr_string">"non_standard_algorithm"</span>),
+<a class="jxr_linenumber" name="L32" href="#L32">32</a>    MD5SUM_TOOL_GENERATED_MANIFEST(<span class="jxr_string">"md5sum_tool_generated_manifest"</span>),
+<a class="jxr_linenumber" name="L33" href="#L33">33</a>    MISSING_TAG_MANIFEST(<span class="jxr_string">"missing_tag_manifest"</span>),
+<a class="jxr_linenumber" name="L34" href="#L34">34</a>    OLD_BAGIT_VERSION(<span class="jxr_string">"old_bagit_version"</span>),
+<a class="jxr_linenumber" name="L35" href="#L35">35</a>    OS_SPECIFIC_FILES(<span class="jxr_string">"os_specific_files"</span>),
+<a class="jxr_linenumber" name="L36" href="#L36">36</a>    PAYLOAD_OXUM_MISSING(<span class="jxr_string">"payload_oxum_missing"</span>),
+<a class="jxr_linenumber" name="L37" href="#L37">37</a>    TAG_FILES_ENCODING(<span class="jxr_string">"tag_files_encoding"</span>),
+<a class="jxr_linenumber" name="L38" href="#L38">38</a>    WEAK_CHECKSUM_ALGORITHM(<span class="jxr_string">"weak_checksum_algorithm"</span>),
+<a class="jxr_linenumber" name="L39" href="#L39">39</a>    MANIFEST_SETS_DIFFER(<span class="jxr_string">"manifest_file_sets_differ_between_algorithms"</span>);
+<a class="jxr_linenumber" name="L40" href="#L40">40</a>    
+<a class="jxr_linenumber" name="L41" href="#L41">41</a>    <strong class="jxr_keyword">private</strong> <strong class="jxr_keyword">final</strong> String messageBundleKey;
+<a class="jxr_linenumber" name="L42" href="#L42">42</a>    <strong class="jxr_keyword">private</strong> <strong class="jxr_keyword">static</strong> <strong class="jxr_keyword">final</strong> ResourceBundle messages = ResourceBundle.getBundle(<span class="jxr_string">"MessageBundle"</span>);
+<a class="jxr_linenumber" name="L43" href="#L43">43</a>    
+<a class="jxr_linenumber" name="L44" href="#L44">44</a>    <strong class="jxr_keyword">private</strong> <a name="BagitWarning" href="../../../../../nl/knaw/dans/bagit/conformance/BagitWarning.html#BagitWarning">BagitWarning</a>(<strong class="jxr_keyword">final</strong> String reason){
+<a class="jxr_linenumber" name="L45" href="#L45">45</a>      <strong class="jxr_keyword">this</strong>.messageBundleKey = reason;
+<a class="jxr_linenumber" name="L46" href="#L46">46</a>    }
+<a class="jxr_linenumber" name="L47" href="#L47">47</a>  
+<a class="jxr_linenumber" name="L48" href="#L48">48</a>    <strong class="jxr_keyword">public</strong> String getReason() {
+<a class="jxr_linenumber" name="L49" href="#L49">49</a>      <strong class="jxr_keyword">return</strong> messages.getString(messageBundleKey);
+<a class="jxr_linenumber" name="L50" href="#L50">50</a>    }
+<a class="jxr_linenumber" name="L51" href="#L51">51</a>  }
+</pre>
+<hr/>
+<div id="footer">© 2023–2026</div>
+</body>
+</html>
