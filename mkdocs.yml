@@ -37,6 +37,7 @@ extra:
 plugins:
   - markdownextradata
   - search
+  - macros
 
 markdown_extensions:
   - attr_list
