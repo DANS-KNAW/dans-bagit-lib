@@ -26,7 +26,7 @@
     </parent>
 
     <artifactId>dans-bagit-lib</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1-SNAPSHOT</version>
 
     <name>DANS BagIt Library</name>
     <description>The BAGIT LIBRARY is a software library intended to support the creation, manipulation, and validation of bags. Its current version is 0.97. It is version aware with the earliest supported version being 0.93.</description>
@@ -36,7 +36,7 @@
     <scm>
         <connection>scm:git:https://github.com/DANS-KNAW/${project.artifactId}</connection>
         <developerConnection>scm:git:ssh://github.com/DANS-KNAW/${project.artifactId}</developerConnection>
-        <tag>v2.0.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <dependencies>
