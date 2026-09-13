@@ -1,0 +1,624 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang=""><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Hasher.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">DANS BagIt Library</a> &gt; <a href="index.source.html" class="el_package">nl.knaw.dans.bagit.hash</a> &gt; <span class="el_source">Hasher.java</span></div><h1>Hasher.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2023 DANS - Data Archiving and Networked Services (info@dans.knaw.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package nl.knaw.dans.bagit.hash;
+
+import nl.knaw.dans.bagit.domain.FetchItem;
+import nl.knaw.dans.bagit.domain.Manifest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.ProtocolException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Formatter;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.ResourceBundle;
+
+/**
+ * Convenience class for generating a HEX formatted string of the checksum hash.
+ */
+public final class Hasher {
+<span class="fc" id="L47">    private static final Logger logger = LoggerFactory.getLogger(Hasher.class);</span>
+    private static final int _64_KB = 1024 * 64;
+    private static final int CHUNK_SIZE = _64_KB;
+<span class="fc" id="L50">    private static final ResourceBundle messages = ResourceBundle.getBundle(&quot;MessageBundle&quot;);</span>
+
+    public static final String CHUNK_SIZE_PROP = &quot;nl.knaw.dans.bagit.hash.chunkSize&quot;;
+    public static final String MAX_RETRIES_PROP = &quot;nl.knaw.dans.bagit.hash.maxRetries&quot;;
+    public static final String RETRY_SLEEP_MS_PROP = &quot;nl.knaw.dans.bagit.hash.retrySleepMs&quot;;
+    public static final String MAX_REDIRECTS_PROP = &quot;nl.knaw.dans.bagit.hash.maxRedirects&quot;;
+    public static final String FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL_PROP = &quot;nl.knaw.dans.bagit.hash.fallBackToFullStreamOnRangeFail&quot;;
+
+    private static final int DEFAULT_CHUNK_SIZE = 1024 * 1024 * 128; // 128 MB
+    private static final int DEFAULT_MAX_RETRIES = 5;
+    private static final int DEFAULT_RETRY_SLEEP_MS = 5000;
+    private static final int DEFAULT_MAX_REDIRECTS = 20;
+    private static final boolean DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL = false;
+
+    private Hasher() {
+        //intentionally left empty
+    }
+
+    /**
+     * Create a HEX formatted string checksum hash of the file
+     *
+     * @param path          the {@link Path} (file) to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @return the hash as a hex formated string
+     * @throws IOException if there is a problem reading the file
+     */
+    public static String hash(final Path path, final MessageDigest messageDigest) throws IOException {
+<span class="fc" id="L77">        updateMessageDigests(path, Collections.singletonList(messageDigest));</span>
+
+<span class="fc" id="L79">        return formatMessageDigest(messageDigest);</span>
+    }
+
+    /**
+     * Create a HEX formatted string checksum hash of the data from the URL
+     *
+     * @param url           the {@link URL} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @return the hash as a hex-formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final URL url, final MessageDigest messageDigest) throws IOException {
+<span class="fc" id="L91">        return hash(url, messageDigest, null);</span>
+    }
+
+    /**
+     * Create a HEX-formatted string checksum hash of the data from the {@link FetchItem}
+     *
+     * @param item          the {@link FetchItem} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @return the hash as a hex-formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final FetchItem item, final MessageDigest messageDigest, final Map&lt;String, String&gt; extraHeaders) throws IOException {
+<span class="fc" id="L104">        return hash(item, messageDigest, extraHeaders, HashOptions.systemProperties());</span>
+    }
+
+    /**
+     * Create a HEX-formatted string checksum hash of the data from the {@link FetchItem}
+     *
+     * @param item          the {@link FetchItem} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @param hashOptions   optional settings for ranged HTTP requests
+     * @return the hash as a hex-formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final FetchItem item, final MessageDigest messageDigest, final Map&lt;String, String&gt; extraHeaders, final HashOptions hashOptions) throws IOException {
+<span class="pc bpc" id="L118" title="1 of 4 branches missed.">        long totalSize = (item.length != null &amp;&amp; item.length &gt;= 0) ? item.length : -1;</span>
+<span class="fc" id="L119">        URL currentUrl = item.url;</span>
+<span class="fc" id="L120">        Map&lt;String, String&gt; currentHeaders = extraHeaders;</span>
+
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        if (!currentUrl.getProtocol().startsWith(&quot;http&quot;)) {</span>
+<span class="fc" id="L123">            return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);</span>
+        }
+
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">        HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;</span>
+<span class="fc" id="L127">        long chunkSize = effectiveOptions.getChunkSize();</span>
+<span class="fc" id="L128">        int maxRetries = effectiveOptions.getMaxRetries();</span>
+<span class="fc" id="L129">        int retrySleepMs = effectiveOptions.getRetrySleepMs();</span>
+<span class="fc" id="L130">        int maxRedirects = effectiveOptions.getMaxRedirects();</span>
+<span class="fc" id="L131">        int redirectCount = 0;</span>
+
+<span class="fc" id="L133">        long offset = 0;</span>
+<span class="fc bfc" id="L134" title="All 4 branches covered.">        while (totalSize &lt; 0 || offset &lt; totalSize) {</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">            long end = (totalSize &gt; 0) ? Math.min(offset + chunkSize - 1, totalSize - 1) : offset + chunkSize - 1;</span>
+<span class="fc" id="L136">            String range = &quot;bytes=&quot; + offset + &quot;-&quot; + end;</span>
+
+<span class="fc" id="L138">            final URL finalUrl = currentUrl;</span>
+<span class="fc" id="L139">            final Map&lt;String, String&gt; finalHeaders = currentHeaders;</span>
+<span class="fc" id="L140">            final long finalOffset = offset;</span>
+<span class="fc" id="L141">            final long finalTotalSize = totalSize;</span>
+
+            try {
+<span class="fc" id="L144">                ChunkResult result = executeWithRetry(() -&gt; {</span>
+<span class="fc" id="L145">                    HttpURLConnection conn = openRangedConnection(finalUrl, range, finalHeaders);</span>
+<span class="fc" id="L146">                    int code = conn.getResponseCode();</span>
+
+                    // Manual redirect following
+<span class="fc bfc" id="L149" title="All 4 branches covered.">                    if (code &gt;= 300 &amp;&amp; code &lt; 400) {</span>
+<span class="fc" id="L150">                        return ChunkResult.redirect(conn.getHeaderField(&quot;Location&quot;));</span>
+                    }
+
+<span class="fc bfc" id="L153" title="All 2 branches covered.">                    if (code == 206) {</span>
+<span class="fc" id="L154">                        return handlePartialContent(conn, messageDigest, finalTotalSize, range);</span>
+                    }
+<span class="fc bfc" id="L156" title="All 2 branches covered.">                    else if (code == 200) {</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">                        if (finalOffset &gt; 0) {</span>
+<span class="fc" id="L158">                            throw new ProtocolException(&quot;Server returned 200 OK for range request &quot; + range + &quot; from &quot; + finalUrl);</span>
+                        }
+<span class="fc" id="L160">                        logger.info(&quot;Server returned 200 OK for first range request (probably range requests are not supported); downloading full stream from {}&quot;, finalUrl);</span>
+<span class="fc" id="L161">                        messageDigest.reset(); // Reset in case we got here after a retry</span>
+<span class="fc" id="L162">                        try (InputStream is = conn.getInputStream()) {</span>
+<span class="fc" id="L163">                            long totalRead = updateDigestFromStream(is, messageDigest);</span>
+<span class="pc bpc" id="L164" title="1 of 4 branches missed.">                            if (finalTotalSize &gt;= 0 &amp;&amp; totalRead != finalTotalSize) {</span>
+<span class="nc" id="L165">                                throw new IOException(&quot;Expected to read &quot; + finalTotalSize + &quot; bytes but read &quot; + totalRead + &quot; bytes from &quot; + finalUrl);</span>
+                            }
+                        }
+<span class="fc" id="L168">                        return ChunkResult.fullStream(formatMessageDigest(messageDigest));</span>
+                    }
+                    else {
+<span class="fc" id="L171">                        throw new IOException(&quot;Unexpected response code &quot; + code + &quot; for &quot; + finalUrl);</span>
+                    }
+                }, &quot;Error fetching range &quot; + range + &quot; from &quot; + currentUrl, maxRetries, retrySleepMs);
+
+<span class="fc" id="L175">                logger.debug(&quot;Processing chunk result for range {} from {}&quot;, range, currentUrl);</span>
+
+<span class="fc bfc" id="L177" title="All 2 branches covered.">                if (result.type == ChunkResultType.FULL_STREAM_SUCCESS) {</span>
+<span class="fc" id="L178">                    redirectCount = 0;</span>
+<span class="fc" id="L179">                    logger.debug(&quot;Successfully processed full stream for range {} from {}&quot;, range, currentUrl);</span>
+<span class="fc" id="L180">                    return result.hash;</span>
+                }
+<span class="fc bfc" id="L182" title="All 2 branches covered.">                else if (result.type == ChunkResultType.REDIRECT) {</span>
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">                    if (++redirectCount &gt; maxRedirects) {</span>
+<span class="nc" id="L184">                        throw new ProtocolException(&quot;Too many redirects&quot;);</span>
+                    }
+<span class="fc" id="L186">                    URL nextUrl = new URL(currentUrl, result.location);</span>
+<span class="pc bpc" id="L187" title="3 of 4 branches missed.">                    if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {</span>
+<span class="fc" id="L188">                        currentHeaders = null;</span>
+                    }
+<span class="fc" id="L190">                    currentUrl = nextUrl;</span>
+<span class="pc bpc" id="L191" title="1 of 2 branches missed.">                    logger.debug(&quot;Redirected to {}, currentHeaders stripped: {}&quot;, currentUrl, (currentHeaders == null));</span>
+                    // Skip offset update and retry the current chunk with new URL
+<span class="fc" id="L193">                }</span>
+<span class="pc bpc" id="L194" title="1 of 2 branches missed.">                else if (result.type == ChunkResultType.SUCCESS) {</span>
+<span class="fc" id="L195">                    redirectCount = 0;</span>
+<span class="fc" id="L196">                    currentUrl = item.url;</span>
+<span class="fc" id="L197">                    currentHeaders = extraHeaders;</span>
+<span class="fc" id="L198">                    offset += result.bytesRead;</span>
+<span class="pc bpc" id="L199" title="1 of 4 branches missed.">                    if (totalSize &lt; 0 &amp;&amp; result.totalSize &gt; 0) {</span>
+<span class="fc" id="L200">                        totalSize = result.totalSize;</span>
+                    }
+<span class="fc" id="L202">                    logger.debug(&quot;Successfully processed chunk for range {} from {}&quot;, range, currentUrl);</span>
+<span class="pc bpc" id="L203" title="2 of 4 branches missed.">                    logger.debug(&quot;Read {} of {}{}&quot;, offset, totalSize &gt; 0 ? totalSize : &quot;Unknown&quot;, totalSize &gt; 0 ? &quot; (&quot; + (offset * 100L / totalSize) + &quot;%)&quot; : &quot;&quot;);</span>
+                }
+            }
+<span class="fc" id="L206">            catch (ProtocolException e) {</span>
+<span class="fc" id="L207">                throw e;</span>
+            }
+<span class="fc" id="L209">            catch (IOException e) {</span>
+<span class="pc bpc" id="L210" title="1 of 2 branches missed.">                if (effectiveOptions.isFallBackToFullStreamOnRangeFail()) {</span>
+<span class="fc" id="L211">                    logger.info(&quot;Falling back to full stream for {} after failed range requests&quot;, currentUrl);</span>
+<span class="fc" id="L212">                    messageDigest.reset();</span>
+<span class="fc" id="L213">                    return hashFullStream(currentUrl, messageDigest, currentHeaders, hashOptions);</span>
+                }
+                else {
+<span class="nc" id="L216">                    logger.error(&quot;Failed range requests for {}, and fallback to full stream is disabled&quot;, currentUrl);</span>
+<span class="nc" id="L217">                    throw e;</span>
+                }
+<span class="fc" id="L219">            }</span>
+<span class="fc" id="L220">        }</span>
+
+<span class="fc" id="L222">        return formatMessageDigest(messageDigest);</span>
+    }
+
+    private static String hashFullStream(final URL url, final MessageDigest messageDigest, final Map&lt;String, String&gt; extraHeaders, final HashOptions hashOptions) throws IOException {
+<span class="pc bpc" id="L226" title="1 of 2 branches missed.">        HashOptions effectiveOptions = hashOptions == null ? HashOptions.systemProperties() : hashOptions;</span>
+<span class="fc" id="L227">        int maxRetries = effectiveOptions.getMaxRetries();</span>
+<span class="fc" id="L228">        int retrySleepMs = effectiveOptions.getRetrySleepMs();</span>
+<span class="fc" id="L229">        int maxRedirects = effectiveOptions.getMaxRedirects();</span>
+
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">        for (int attempt = 0; attempt &lt; maxRetries; attempt++) {</span>
+<span class="fc" id="L232">            URL currentUrl = url;</span>
+<span class="fc" id="L233">            Map&lt;String, String&gt; currentHeaders = extraHeaders;</span>
+            try {
+<span class="fc" id="L235">                int redirectCount = 0;</span>
+                while (true) {
+<span class="fc" id="L237">                    URLConnection conn = currentUrl.openConnection();</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">                    if (conn instanceof HttpURLConnection httpConn) {</span>
+<span class="fc" id="L239">                        httpConn.setInstanceFollowRedirects(false);</span>
+<span class="pc bpc" id="L240" title="1 of 2 branches missed.">                        if (currentHeaders != null) {</span>
+<span class="nc bnc" id="L241" title="All 2 branches missed.">                            for (Entry&lt;String, String&gt; entry : currentHeaders.entrySet()) {</span>
+<span class="nc" id="L242">                                httpConn.setRequestProperty(entry.getKey(), entry.getValue());</span>
+<span class="nc" id="L243">                            }</span>
+                        }
+<span class="fc" id="L245">                        int code = httpConn.getResponseCode();</span>
+<span class="pc bpc" id="L246" title="3 of 4 branches missed.">                        if (code &gt;= 300 &amp;&amp; code &lt; 400) {</span>
+<span class="nc bnc" id="L247" title="All 2 branches missed.">                            if (++redirectCount &gt; maxRedirects) {</span>
+<span class="nc" id="L248">                                throw new ProtocolException(&quot;Too many redirects&quot;);</span>
+                            }
+<span class="nc" id="L250">                            String location = httpConn.getHeaderField(&quot;Location&quot;);</span>
+<span class="nc" id="L251">                            URL nextUrl = new URL(currentUrl, location);</span>
+<span class="nc bnc" id="L252" title="All 4 branches missed.">                            if (!currentUrl.getAuthority().equals(nextUrl.getAuthority()) || !currentUrl.getProtocol().equals(nextUrl.getProtocol())) {</span>
+<span class="nc" id="L253">                                currentHeaders = null;</span>
+                            }
+<span class="nc" id="L255">                            currentUrl = nextUrl;</span>
+<span class="nc" id="L256">                            continue;</span>
+                        }
+<span class="pc bpc" id="L258" title="1 of 2 branches missed.">                        if (code != 200) {</span>
+<span class="nc" id="L259">                            throw new IOException(&quot;Unexpected response code &quot; + code + &quot; for &quot; + currentUrl);</span>
+                        }
+                    }
+<span class="fc" id="L262">                    try (final InputStream is = conn.getInputStream()) {</span>
+<span class="fc" id="L263">                        updateDigestFromStream(is, messageDigest);</span>
+                    }
+<span class="fc" id="L265">                    break;</span>
+                }
+<span class="fc" id="L267">                return formatMessageDigest(messageDigest);</span>
+            }
+<span class="nc" id="L269">            catch (ProtocolException e) {</span>
+<span class="nc" id="L270">                throw e;</span>
+            }
+<span class="nc" id="L272">            catch (IOException e) {</span>
+<span class="nc" id="L273">                logger.warn(&quot;Error fetching full stream from {} (attempt {}/{}): {}&quot;, url, attempt + 1, maxRetries, e.getMessage());</span>
+<span class="nc" id="L274">                messageDigest.reset();</span>
+<span class="nc bnc" id="L275" title="All 2 branches missed.">                if (attempt &lt; maxRetries - 1) {</span>
+                    try {
+<span class="nc" id="L277">                        Thread.sleep(retrySleepMs);</span>
+                    }
+<span class="nc" id="L279">                    catch (InterruptedException ie) {</span>
+<span class="nc" id="L280">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L281">                        throw new IOException(&quot;Interrupted during retry sleep&quot;, ie);</span>
+<span class="nc" id="L282">                    }</span>
+                }
+                else {
+<span class="nc" id="L285">                    throw e;</span>
+                }
+            }
+        }
+<span class="nc" id="L289">        throw new IOException(&quot;Max retries exceeded&quot;);</span>
+    }
+
+    /**
+     * Create a HEX formatted string checksum hash of the data from the URL
+     *
+     * @param url           the {@link URL} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @return the hash as a hex formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final URL url, final MessageDigest messageDigest, final Map&lt;String, String&gt; extraHeaders) throws IOException {
+<span class="fc" id="L302">        return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders);</span>
+    }
+
+    /**
+     * Create a HEX formatted string checksum hash of the data from the URL
+     *
+     * @param url           the {@link URL} to hash
+     * @param messageDigest the {@link MessageDigest} object representing the hashing algorithm
+     * @param extraHeaders  optional extra headers to send with the request
+     * @param hashOptions   optional settings for ranged HTTP requests
+     * @return the hash as a hex formatted string
+     * @throws IOException if there is a problem reading from the URL
+     */
+    public static String hash(final URL url, final MessageDigest messageDigest, final Map&lt;String, String&gt; extraHeaders, final HashOptions hashOptions) throws IOException {
+<span class="nc" id="L316">        return hash(new FetchItem(url, -1L, null), messageDigest, extraHeaders, hashOptions);</span>
+    }
+
+    private static ChunkResult handlePartialContent(HttpURLConnection conn, MessageDigest messageDigest, long currentTotalSize, String range) throws IOException {
+<span class="fc" id="L320">        long totalSize = currentTotalSize;</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">        if (totalSize &lt; 0) {</span>
+<span class="fc" id="L322">            String contentRange = conn.getHeaderField(&quot;Content-Range&quot;);</span>
+<span class="pc bpc" id="L323" title="2 of 4 branches missed.">            if (contentRange != null &amp;&amp; contentRange.contains(&quot;/&quot;)) {</span>
+                try {
+<span class="fc" id="L325">                    totalSize = Long.parseLong(contentRange.substring(contentRange.lastIndexOf(&quot;/&quot;) + 1));</span>
+                }
+<span class="nc" id="L327">                catch (NumberFormatException e) {</span>
+<span class="nc" id="L328">                    logger.warn(&quot;Could not parse Content-Range: {}&quot;, contentRange);</span>
+<span class="fc" id="L329">                }</span>
+            }
+        }
+<span class="fc" id="L332">        try (InputStream is = conn.getInputStream()) {</span>
+<span class="fc" id="L333">            byte[] bytes = is.readAllBytes();</span>
+<span class="pc bpc" id="L334" title="1 of 2 branches missed.">            if (bytes.length == 0) {</span>
+                // N.B. getting the range from the connection at this point may throw an exception, so we use the range we already have.
+<span class="nc" id="L336">                throw new IOException(&quot;Received empty response for range request &quot; + range + &quot; from &quot; + conn.getURL());</span>
+            }
+<span class="fc" id="L338">            messageDigest.update(bytes);</span>
+<span class="fc" id="L339">            logger.debug(&quot;Updated message digest with range {}&quot;, range);</span>
+<span class="fc" id="L340">            return ChunkResult.success(bytes.length, totalSize);</span>
+        }
+    }
+
+    private static ChunkResult executeWithRetry(RetryableOperation&lt;ChunkResult&gt; operation, String description, int maxRetries, int retrySleepMs) throws IOException {
+<span class="pc bpc" id="L345" title="1 of 2 branches missed.">        for (int attempt = 0; attempt &lt; maxRetries; attempt++) {</span>
+            try {
+<span class="fc" id="L347">                return operation.execute();</span>
+            }
+<span class="fc" id="L349">            catch (ProtocolException e) {</span>
+<span class="fc" id="L350">                throw e;</span>
+            }
+<span class="fc" id="L352">            catch (IOException e) {</span>
+<span class="fc" id="L353">                logger.warn(&quot;{} (attempt {}/{}): {}&quot;, description, attempt + 1, maxRetries, e.getMessage());</span>
+<span class="fc bfc" id="L354" title="All 2 branches covered.">                if (attempt &lt; maxRetries - 1) {</span>
+                    try {
+<span class="fc" id="L356">                        Thread.sleep(retrySleepMs);</span>
+                    }
+<span class="nc" id="L358">                    catch (InterruptedException ie) {</span>
+<span class="nc" id="L359">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L360">                        throw new IOException(&quot;Interrupted during retry sleep&quot;, ie);</span>
+<span class="fc" id="L361">                    }</span>
+                }
+                else {
+<span class="fc" id="L364">                    throw e;</span>
+                }
+            }
+        }
+<span class="nc" id="L368">        throw new IOException(&quot;Max retries exceeded&quot;);</span>
+    }
+
+    @FunctionalInterface
+    private interface RetryableOperation&lt;T&gt; {
+        T execute() throws IOException;
+    }
+
+<span class="fc" id="L376">    private enum ChunkResultType {</span>
+<span class="fc" id="L377">        SUCCESS, REDIRECT, FULL_STREAM_SUCCESS</span>
+    }
+
+    /**
+     * Represents the result of a chunk operation when processing data for hashing. A chunk operation can have various results, such as a successful read, a redirection to another location, or
+     * successful processing of a complete stream.
+     */
+    private static class ChunkResult {
+        final ChunkResultType type;
+        final long bytesRead;
+        final long totalSize;
+        final String location;
+        final String hash;
+
+<span class="fc" id="L391">        private ChunkResult(ChunkResultType type, long bytesRead, long totalSize, String location, String hash) {</span>
+<span class="fc" id="L392">            this.type = type;</span>
+<span class="fc" id="L393">            this.bytesRead = bytesRead;</span>
+<span class="fc" id="L394">            this.totalSize = totalSize;</span>
+<span class="fc" id="L395">            this.location = location;</span>
+<span class="fc" id="L396">            this.hash = hash;</span>
+<span class="fc" id="L397">        }</span>
+
+        static ChunkResult success(long bytesRead, long totalSize) {
+<span class="fc" id="L400">            return new ChunkResult(ChunkResultType.SUCCESS, bytesRead, totalSize, null, null);</span>
+        }
+
+        static ChunkResult redirect(String location) {
+<span class="fc" id="L404">            return new ChunkResult(ChunkResultType.REDIRECT, 0, -1, location, null);</span>
+        }
+
+        static ChunkResult fullStream(String hash) {
+<span class="fc" id="L408">            return new ChunkResult(ChunkResultType.FULL_STREAM_SUCCESS, 0, -1, null, hash);</span>
+        }
+    }
+
+    /**
+     * Opens a HttpURLConnection for the given range.
+     */
+    private static HttpURLConnection openRangedConnection(URL url, String range, final Map&lt;String, String&gt; extraHeaders) throws IOException {
+<span class="fc" id="L416">        HttpURLConnection conn = (HttpURLConnection) url.openConnection();</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">        if (extraHeaders != null) {</span>
+<span class="fc bfc" id="L418" title="All 2 branches covered.">            for (Entry&lt;String, String&gt; entry : extraHeaders.entrySet()) {</span>
+<span class="fc" id="L419">                conn.setRequestProperty(entry.getKey(), entry.getValue());</span>
+<span class="fc" id="L420">            }</span>
+        }
+<span class="fc" id="L422">        conn.setInstanceFollowRedirects(false);</span>
+<span class="pc bpc" id="L423" title="1 of 2 branches missed.">        if (range != null) {</span>
+<span class="fc" id="L424">            conn.setRequestProperty(&quot;Range&quot;, range);</span>
+        }
+<span class="fc" id="L426">        return conn;</span>
+    }
+
+    /**
+     * Reads from the InputStream and updates the MessageDigest. Returns the number of bytes read.
+     */
+    private static long updateDigestFromStream(InputStream is, MessageDigest messageDigest) throws IOException {
+<span class="fc" id="L433">        byte[] buffer = new byte[CHUNK_SIZE];</span>
+<span class="fc" id="L434">        long totalRead = 0;</span>
+<span class="fc" id="L435">        int read = is.read(buffer);</span>
+<span class="fc bfc" id="L436" title="All 2 branches covered.">        while (read != -1) {</span>
+<span class="fc" id="L437">            messageDigest.update(buffer, 0, read);</span>
+<span class="fc" id="L438">            totalRead += read;</span>
+<span class="fc" id="L439">            read = is.read(buffer);</span>
+        }
+<span class="fc" id="L441">        return totalRead;</span>
+    }
+
+    /**
+     * Update the Manifests with the file's hash
+     *
+     * @param path                       the {@link Path} (file) to hash
+     * @param manifestToMessageDigestMap the map between {@link Manifest} and {@link MessageDigest}
+     * @throws IOException if there is a problem reading the file
+     */
+    public static void hash(final Path path, final Map&lt;Manifest, MessageDigest&gt; manifestToMessageDigestMap) throws IOException {
+<span class="fc" id="L452">        updateMessageDigests(path, manifestToMessageDigestMap.values());</span>
+<span class="fc" id="L453">        addMessageDigestHashToManifest(path, manifestToMessageDigestMap);</span>
+<span class="fc" id="L454">    }</span>
+
+    static void updateMessageDigests(final Path path, final Collection&lt;MessageDigest&gt; messageDigests) throws IOException {
+<span class="fc" id="L457">        try (final InputStream is = new BufferedInputStream(Files.newInputStream(path, StandardOpenOption.READ))) {</span>
+<span class="fc" id="L458">            final byte[] buffer = new byte[CHUNK_SIZE];</span>
+<span class="fc" id="L459">            int read = is.read(buffer);</span>
+
+<span class="fc bfc" id="L461" title="All 2 branches covered.">            while (read != -1) {</span>
+<span class="fc bfc" id="L462" title="All 2 branches covered.">                for (final MessageDigest messageDigest : messageDigests) {</span>
+<span class="fc" id="L463">                    messageDigest.update(buffer, 0, read);</span>
+<span class="fc" id="L464">                }</span>
+<span class="fc" id="L465">                read = is.read(buffer);</span>
+            }
+        }
+<span class="fc" id="L468">    }</span>
+
+    private static void addMessageDigestHashToManifest(final Path path, final Map&lt;Manifest, MessageDigest&gt; manifestToMessageDigestMap) {
+<span class="fc bfc" id="L471" title="All 2 branches covered.">        for (final Entry&lt;Manifest, MessageDigest&gt; entry : manifestToMessageDigestMap.entrySet()) {</span>
+<span class="fc" id="L472">            final String hash = formatMessageDigest(entry.getValue());</span>
+<span class="fc" id="L473">            logger.debug(messages.getString(&quot;adding_checksum&quot;), path, hash);</span>
+<span class="fc" id="L474">            entry.getKey().getFileToChecksumMap().put(path, hash);</span>
+<span class="fc" id="L475">        }</span>
+<span class="fc" id="L476">    }</span>
+
+    //Convert the byte to hex format
+    private static String formatMessageDigest(final MessageDigest messageDigest) {
+<span class="fc" id="L480">        try (final Formatter formatter = new Formatter()) {</span>
+<span class="fc bfc" id="L481" title="All 2 branches covered.">            for (final byte b : messageDigest.digest()) {</span>
+<span class="fc" id="L482">                formatter.format(&quot;%02x&quot;, b);</span>
+            }
+
+<span class="fc" id="L485">            return formatter.toString();</span>
+        }
+    }
+
+    /**
+     * create a mapping between {@link Manifest} and {@link MessageDigest} for each each supplied {@link SupportedAlgorithm}
+     *
+     * @param algorithms the {@link SupportedAlgorithm} that you which to map to {@link MessageDigest}
+     * @return mapping between {@link Manifest} and {@link MessageDigest}
+     * @throws NoSuchAlgorithmException if {@link MessageDigest} doesn't support the algorithm
+     */
+    @SuppressWarnings(&quot;PMD.AvoidInstantiatingObjectsInLoops&quot;)
+    public static Map&lt;Manifest, MessageDigest&gt; createManifestToMessageDigestMap(final Collection&lt;SupportedAlgorithm&gt; algorithms) throws NoSuchAlgorithmException {
+<span class="fc" id="L498">        final Map&lt;Manifest, MessageDigest&gt; map = new HashMap&lt;&gt;();</span>
+
+<span class="fc bfc" id="L500" title="All 2 branches covered.">        for (final SupportedAlgorithm algorithm : algorithms) {</span>
+<span class="fc" id="L501">            final MessageDigest messageDigest = MessageDigest.getInstance(algorithm.getMessageDigestName());</span>
+<span class="fc" id="L502">            final Manifest manifest = new Manifest(algorithm);</span>
+<span class="fc" id="L503">            map.put(manifest, messageDigest);</span>
+<span class="fc" id="L504">        }</span>
+
+<span class="fc" id="L506">        return map;</span>
+    }
+
+    /**
+     * Represents configuration options for hashing operations. This class is immutable and provides various configurable parameters such as chunk size, retry behavior, and redirection limits.
+     */
+    public static final class HashOptions {
+        private final int chunkSize;
+        private final int maxRetries;
+        private final int retrySleepMs;
+        private final int maxRedirects;
+        private final boolean fallBackToFullStreamOnRangeFail;
+
+        /**
+         * Constructs an instance of {@code HashOptions} with specific configuration settings for chunk size, retry behavior, and redirection limits.
+         *
+         * @param chunkSize    the size of data chunks in bytes; must be greater than 0
+         * @param maxRetries   the maximum number of retry attempts; must be greater than 0
+         * @param retrySleepMs the time in milliseconds to sleep between retries
+         * @param maxRedirects the maximum number of redirects allowed; must be greater than or equal to 0
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+<span class="fc" id="L528">        public HashOptions(final int chunkSize, final int maxRetries, final int retrySleepMs, final int maxRedirects, boolean fallBackToFullStreamOnRangeFail) {</span>
+<span class="pc bpc" id="L529" title="1 of 2 branches missed.">            if (chunkSize &lt;= 0) {</span>
+<span class="nc" id="L530">                throw new IllegalArgumentException(&quot;chunkSize must be greater than 0&quot;);</span>
+            }
+<span class="pc bpc" id="L532" title="1 of 2 branches missed.">            if (maxRetries &lt;= 0) {</span>
+<span class="nc" id="L533">                throw new IllegalArgumentException(&quot;maxRetries must be greater than 0&quot;);</span>
+            }
+<span class="pc bpc" id="L535" title="1 of 2 branches missed.">            if (maxRedirects &lt; 0) {</span>
+<span class="nc" id="L536">                throw new IllegalArgumentException(&quot;maxRedirects must be greater than or equal to 0&quot;);</span>
+            }
+<span class="fc" id="L538">            this.chunkSize = chunkSize;</span>
+<span class="fc" id="L539">            this.maxRetries = maxRetries;</span>
+<span class="fc" id="L540">            this.retrySleepMs = retrySleepMs;</span>
+<span class="fc" id="L541">            this.maxRedirects = maxRedirects;</span>
+<span class="fc" id="L542">            this.fallBackToFullStreamOnRangeFail = fallBackToFullStreamOnRangeFail;</span>
+<span class="fc" id="L543">        }</span>
+
+        /**
+         * Creates an instance of {@code HashOptions} using system properties to determine the configuration values for chunk size, maximum retries, retry sleep time, and maximum redirects. Defaults
+         * are used if the respective system properties are not set.
+         *
+         * The following system properties are used: - {@code CHUNK_SIZE_PROP}: Configures the chunk size in bytes (default: {@code DEFAULT_CHUNK_SIZE}). - {@code MAX_RETRIES_PROP}: Configures the
+         * maximum number of retry attempts (default: {@code DEFAULT_MAX_RETRIES}). - {@code RETRY_SLEEP_MS_PROP}: Configures the sleep time in milliseconds between retries (default:
+         * {@code DEFAULT_RETRY_SLEEP_MS}). - {@code MAX_REDIRECTS_PROP}: Configures the maximum allowable redirects (default: {@code DEFAULT_MAX_REDIRECTS}).
+         *
+         * @return a {@code HashOptions} instance populated with configuration values derived from system properties or their default values.
+         * @throws IllegalArgumentException if any of the retrieved values are invalid (e.g., negative or zero where not allowed)
+         */
+        public static HashOptions systemProperties() {
+<span class="fc" id="L557">            return new HashOptions(</span>
+<span class="fc" id="L558">                Integer.getInteger(CHUNK_SIZE_PROP, DEFAULT_CHUNK_SIZE),</span>
+<span class="fc" id="L559">                Integer.getInteger(MAX_RETRIES_PROP, DEFAULT_MAX_RETRIES),</span>
+<span class="fc" id="L560">                Integer.getInteger(RETRY_SLEEP_MS_PROP, DEFAULT_RETRY_SLEEP_MS),</span>
+<span class="fc" id="L561">                Integer.getInteger(MAX_REDIRECTS_PROP, DEFAULT_MAX_REDIRECTS),</span>
+<span class="fc" id="L562">                Boolean.parseBoolean(System.getProperty(FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL_PROP, String.valueOf(DEFAULT_FALL_BACK_TO_FULL_STREAM_ON_RANGE_FAIL)))</span>
+            );
+        }
+
+        /**
+         * Returns a new {@code HashOptions} instance with the specified overrides for configuration parameters. If a parameter is {@code null}, the existing value from the current {@code HashOptions}
+         * instance is used.
+         *
+         * @param chunkSize    the size of data chunks in bytes; if {@code null}, the existing chunk size is retained
+         * @param maxRetries   the maximum number of retry attempts; if {@code null}, the existing max retries value is retained
+         * @param retrySleepMs the time in milliseconds to sleep between retries; if {@code null}, the existing retry sleep time is retained
+         * @param maxRedirects the maximum number of redirects allowed; if {@code null}, the existing max redirects value is retained
+         * @return a new {@code HashOptions} instance with the specified values or the existing values if overrides are {@code null}
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects) {
+<span class="nc" id="L578">            return withOverrides(chunkSize, maxRetries, retrySleepMs, maxRedirects, null);</span>
+        }
+
+        /**
+         * Returns a new {@code HashOptions} instance with the specified overrides for configuration parameters. If a parameter is {@code null}, the existing value from the current {@code HashOptions}
+         * instance is used.
+         *
+         * @param chunkSize    the size of data chunks in bytes; if {@code null}, the existing chunk size is retained
+         * @param maxRetries   the maximum number of retry attempts; if {@code null}, the existing max retries value is retained
+         * @param retrySleepMs the time in milliseconds to sleep between retries; if {@code null}, the existing retry sleep time is retained
+         * @param maxRedirects the maximum number of redirects allowed; if {@code null}, the existing max redirects value is retained
+         * @param fallBackToFullStreamOnRangeFail whether to fall back to full stream; if {@code null}, the existing value is retained
+         * @return a new {@code HashOptions} instance with the specified values or the existing values if overrides are {@code null}
+         * @throws IllegalArgumentException if any of the provided values are invalid (e.g., negative or zero where not allowed)
+         */
+        public HashOptions withOverrides(final Integer chunkSize, final Integer maxRetries, final Integer retrySleepMs, final Integer maxRedirects, final Boolean fallBackToFullStreamOnRangeFail) {
+<span class="fc" id="L594">            return new HashOptions(</span>
+<span class="fc bfc" id="L595" title="All 2 branches covered.">                chunkSize == null ? this.chunkSize : chunkSize,</span>
+<span class="fc bfc" id="L596" title="All 2 branches covered.">                maxRetries == null ? this.maxRetries : maxRetries,</span>
+<span class="fc bfc" id="L597" title="All 2 branches covered.">                retrySleepMs == null ? this.retrySleepMs : retrySleepMs,</span>
+<span class="pc bpc" id="L598" title="1 of 2 branches missed.">                maxRedirects == null ? this.maxRedirects : maxRedirects,</span>
+<span class="pc bpc" id="L599" title="1 of 2 branches missed.">                fallBackToFullStreamOnRangeFail == null ? this.fallBackToFullStreamOnRangeFail : fallBackToFullStreamOnRangeFail</span>
+            );
+        }
+
+        public int getChunkSize() {
+<span class="fc" id="L604">            return chunkSize;</span>
+        }
+
+        public int getMaxRetries() {
+<span class="fc" id="L608">            return maxRetries;</span>
+        }
+
+        public int getRetrySleepMs() {
+<span class="fc" id="L612">            return retrySleepMs;</span>
+        }
+
+        public int getMaxRedirects() {
+<span class="fc" id="L616">            return maxRedirects;</span>
+        }
+
+        public boolean isFallBackToFullStreamOnRangeFail() {
+<span class="fc" id="L620">            return fallBackToFullStreamOnRangeFail;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
