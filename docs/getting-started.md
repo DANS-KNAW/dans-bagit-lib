@@ -4,7 +4,7 @@ Getting started
 Adding the dependency
 ---------------------
 
-To use this parent POM in a Maven project, add the following to your `pom.xml`:
+To use this library in a Maven project, add the following to your `pom.xml`:
 
 ```xml
 
