@@ -26,7 +26,7 @@ jobs:
           cache: 'maven'
 
       - name: Generate maven site
-        run: mvn -B clean test site
+        run: mvn -B -s .github/ci-settings.xml clean test site
 
       - name: Copy javadocs to site folder
         run: cp -r target/site/ docs/mvnsite/

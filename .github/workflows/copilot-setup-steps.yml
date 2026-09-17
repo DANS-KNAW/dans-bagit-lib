@@ -10,4 +10,4 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
-      - run: mvn -B dependency:go-offline
+      - run: mvn -B -s .github/ci-settings.xml dependency:go-offline
