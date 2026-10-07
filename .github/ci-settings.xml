@@ -8,6 +8,10 @@
             </activation>
             <repositories>
                 <repository>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2</url>
+                </repository>
+                <repository>
                     <id>nexus-snapshots</id>
                     <url>https://maven.dans.knaw.nl/snapshots/</url>
                     <snapshots>
@@ -23,6 +27,10 @@
                 </repository>
             </repositories>
             <pluginRepositories>
+                <pluginRepository>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2</url>
+                </pluginRepository>
                 <pluginRepository>
                     <releases>
                         <enabled>true</enabled>
