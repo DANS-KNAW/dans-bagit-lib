@@ -1,0 +1,12 @@
+nl.knaw.dans.bagit
+nl.knaw.dans.bagit.conformance
+nl.knaw.dans.bagit.conformance.profile
+nl.knaw.dans.bagit.creator
+nl.knaw.dans.bagit.domain
+nl.knaw.dans.bagit.examples.fetching
+nl.knaw.dans.bagit.examples.serialization
+nl.knaw.dans.bagit.hash
+nl.knaw.dans.bagit.reader
+nl.knaw.dans.bagit.util
+nl.knaw.dans.bagit.verify
+nl.knaw.dans.bagit.writer
