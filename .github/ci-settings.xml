@@ -17,10 +17,16 @@
                     <snapshots>
                         <enabled>true</enabled>
                     </snapshots>
+                    <releases>
+                        <enabled>false</enabled>
+                    </releases>
                 </repository>
                 <repository>
                     <id>nexus-releases</id>
                     <url>https://maven.dans.knaw.nl/releases/</url>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
                     <releases>
                         <enabled>true</enabled>
                     </releases>
